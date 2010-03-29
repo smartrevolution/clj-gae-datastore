@@ -34,7 +34,7 @@ result:
 The data can be queried via a very simple query language that is also provided in the
 library. To find all books by a certain author just use the following code:
 
-    com.freiheit.gae.datastore.example>    (select (where book ([= :author "Peter Norvig"])))
+    com.freiheit.gae.datastore.example> (select (where book ([= :author "Peter Norvig"])))
 
 result:
 
