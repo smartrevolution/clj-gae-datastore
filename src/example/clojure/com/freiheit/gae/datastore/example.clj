@@ -20,9 +20,7 @@
   [:isbn]
   [:pages]
   [:outofprint
-   :pre-save #(if (= % "yes")
-		true
-		false)
+   :pre-save #(= % "yes")
    :post-load #(if %
 		 "yes"
 		 "no")])

@@ -14,12 +14,19 @@ data as follows:
       [:isbn]
       [:pages]
       [:outofprint
-       :pre-save #(if (= % "yes")
-                    true
-                    false)
+       :pre-save #(= % "yes")
        :post-load #(if %
                      "yes"
                      "no")])
+
+Storing a book in the datastore can be done via `store-entities!`.
+
+    (store-entities! (make-book :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp"    		   
+                                :author "Peter Norvig"
+                                :publisher "Morgan Kaufmann"
+		                :isbn "978-1558601918"
+		                :pages 946
+		                :outofprint "no"))
 
 The data can be queried via a very simple query language that is also provided in the
 library. To find all books by a certain author just use the following code:
