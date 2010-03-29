@@ -21,17 +21,24 @@ data as follows:
 
 Storing a book in the datastore can be done via `store-entities!`.
 
-    (store-entities! (make-book :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp"    		   
-                                :author "Peter Norvig"
-                                :publisher "Morgan Kaufmann"
-		                :isbn "978-1558601918"
-		                :pages 946
-		                :outofprint "no"))
+    com.freiheit.gae.datastore.example> (store-entities! [(make-book :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp"    		   
+                                                                     :author "Peter Norvig"
+                                                                     :publisher "Morgan Kaufmann"
+                                                                     :isbn "978-1558601918"
+                                                                     :pages 946
+                                                                     :outofprint "no")])
+result:
+
+    ({:outofprint "no", :pages 946, :isbn "978-1558601918", :publisher "Morgan Kaufmann", :author "Peter Norvig", :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp", :key #<Key book(1)>, :parent-key nil, :kind "book"})
 
 The data can be queried via a very simple query language that is also provided in the
 library. To find all books by a certain author just use the following code:
 
-    (select (query/where book ([= :author "Peter Norvig"])))
+    com.freiheit.gae.datastore.example>    (select (where book ([= :author "Peter Norvig"])))
+
+result:
+
+    ({:outofprint "no", :pages 946, :isbn "978-1558601918", :publisher "Morgan Kaufmann", :author "Peter Norvig", :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp", :key #<Key book(1)>, :parent-key nil, :kind "book"})
 
 I need to try this!
 ===================
