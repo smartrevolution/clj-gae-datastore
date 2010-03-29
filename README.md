@@ -46,7 +46,8 @@ directory `"lib"`.
 - some libraries from the Google App Engine SDK. You can use the small script "etc/copy-gae-libs.sh" to 
   do this.
 
-Open the example.clj file in Emacs and use swank-clojure-project to setup a Clojure session. Compile the
+Open the `src/example/clojure/com/freiheit/gae/datastore/example.clj` file in Emacs and use 
+swank-clojure-project to setup a Clojure session. Compile the
 file and execute (init-app-engine) in the REPL. Now you should be able to play with the examples.
 
 For more information about setting up Clojure, Emacs and Google App Engine have a look at our
