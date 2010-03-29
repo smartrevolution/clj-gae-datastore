@@ -1,0 +1,217 @@
+(ns com.freiheit.gae.datastore.datastore-query-dsl
+  #^{:doc "A DSL for querying entities from the google datastore."}
+  (:import [com.google.appengine.api.datastore
+	    DatastoreServiceFactory Entity Key KeyFactory Query Query$FilterOperator
+            EntityNotFoundException FetchOptions$Builder]))
+
+;;;; Querying entities from the google datastore.
+;;;; Provides a query-language which can be used to
+;;;; search for entities by search predicates.
+;;;; 
+;;;; Examples:
+;;;; 1) (select (where feature ([= :feature-title "Register user"])))
+;;;;     this will select all features with a feature-title of "Register user".
+;;;; 2) (select-only-keys (where feature ([= :feature-title "Register user"])))
+;;;;     same as above but will only return the keys of the entities. This is
+;;;;     much faster than querying for whole entities.
+;;;;
+;;;; It's also possible to use '<', '<=', '>' or '>=' in the where clause.
+;;;;  
+;;;; The returned entities are already translated by their corresponding translation function.
+;;;; 
+;;;; 3) (resolve-entities (select (where feature ())) :feature-author-id)
+;;;;     returns a list of features (as in the example above) but replaces the feature-author-id
+;;;;     with the actual entities referenced in the entities' :feature-author-id attributes.
+;;;;
+;;;;     this is done by first collecting all author ids in the list of features returned by
+;;;;     the select clause, and afterwards doing a "batch get" operation. this is more efficient
+;;;;     than doing single queries.
+
+
+;; ------------------------------------------------------------------------------
+;; private functions
+;; ------------------------------------------------------------------------------
+(defn- mapmap
+  "create a new map by applying key-f to every key and val-f to every value of a map"
+  [key-f val-f m]
+  (apply merge (map (fn [[k v]] {(key-f k) (val-f v)}) m)))
+
+(let [fetch-options (FetchOptions$Builder/withLimit 1000)]
+  (defn- execute-query
+    "Execute the datastore query."
+    [#^Query query]
+    (let [data-service (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService)
+          results (. (.prepare data-service query) asList fetch-options)]
+      results)))
+
+(defn- distinct-entity-keys
+  "resolving an id property for a list of elements."
+  [entities attr]
+  (filter identity (distinct (mapcat #(let [ret (attr %)]
+                                        (if (instance? java.util.Collection ret)
+                                          ret
+                                          [ret]))
+                                        entities))))
+
+(defn- translate-map-vals
+  "apply the given function to all values in the map."
+  [m function]
+  (mapmap identity function m))
+
+(defn- replace-map-vals
+  "."
+  [m entities attr target-attr]
+  (map (fn [entity]
+	 (assoc entity target-attr
+                (let [entity-vals (attr entity)]
+                  (if (instance? java.util.Collection entity-vals)
+                    (vals (select-keys m (attr entity)))
+                    (get m entity-vals))))) entities))
+
+(def mem-keyword (memoize keyword))
+
+;; ------------------------------------------------------------------------------
+;; public functions
+;; ------------------------------------------------------------------------------
+(defn entity-to-map
+  "Converts an instance of com.google.appengine.api.datastore.Entity
+  to a PersistentHashMap with properties stored under keyword keys,
+  plus the entity's kind stored under :kind and key stored under :key."
+  [#^com.google.appengine.api.datastore.Entity entity]
+  (reduce #(assoc %1 (mem-keyword (key %2)) (val %2))
+	  {:kind (.getKind entity) :key (.getKey entity)}
+	  (.entrySet (.getProperties entity))))
+
+(defn get-entity-by-key
+  "Return a map of keys to entities for the given keys."
+  [#^com.google.appengine.api.datastore.Key key]
+  (.get (DatastoreServiceFactory/getDatastoreService) key))
+
+(defn get-entities-by-keys
+  "Return a map of keys to entities for the given keys."
+  [#^java.util.Collection keys]
+  (.get (DatastoreServiceFactory/getDatastoreService) keys))
+
+;; translation multi methods
+(defmulti translate-to-datastore 
+  "Multimethod for translating elements to the datastore. Dispatches on the kind."
+  :kind)
+
+(defmulti translate-from-datastore 
+  "Multimethod for translating elements from the datastore. Dispatches on the kind."
+  :kind)
+
+(defmulti to-entity
+  "Multimethod for creating an entity. Dispatches on the kind."
+  :kind)
+
+(defn translate-entities
+  "Translate the attributes of entities with the translation functions from datastore to
+   the actual domain model."
+  [entities]
+  (doall (map (comp translate-from-datastore entity-to-map) entities)))
+
+(defn translate-keys-only
+  "Translate only the keys of the entities."
+  [entities]
+  (map (memfn getKey) entities))
+
+(defn select
+  "Executes the given com.google.appengine.api.datastore.Query
+  and returns the results as a sequence of items converted with entity-to-map."
+  [#^Query query]
+  (doall (-> query
+             execute-query
+             translate-entities)))
+
+(defn select-only-keys
+  "Executes the given com.google.appengine.api.datastore.Query
+  and returns the result-keys."
+  [#^Query query]
+  (doall (-> query
+             (.setKeysOnly)
+             execute-query
+             translate-keys-only)))
+
+(defmacro where
+  "Create a query for a given kind.
+
+  TODO: run the query-parameter-values through translate-to-datastore.
+
+  When the kind is nil, then a kindless-query will be generated.
+
+  Ex: (where person [[= :person-password-hash \"123\"]])"
+  ([kind queries]
+     `(where nil ~kind ~queries))
+  ([parent-key kind queries]
+     (let [kindless? (nil? kind)
+	   op-smap {'= 'com.google.appengine.api.datastore.Query$FilterOperator/EQUAL
+                    'not= 'com.google.appengine.api.datastore.Query$FilterOperator/NOT_EQUAL
+                    '< 'com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN
+                    '<= 'com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN_OR_EQUAL
+                    '> 'com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN
+                    '>= 'com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN_OR_EQUAL
+                    'in 'com.google.appengine.api.datastore.Query$FilterOperator/IN}
+	   op-queries (map (fn [query] (replace op-smap query)) queries)]
+       `(let [q# ~(if kindless?
+                    `(com.google.appengine.api.datastore.Query.)
+                    `(com.google.appengine.api.datastore.Query. ~(name kind)))]
+	  (when ~parent-key
+            (.setAncestor q# ~parent-key))
+	  (doseq [[operator# prop# value#] ~(vec op-queries)]
+	    (. q# addFilter (name prop#) (eval operator#) value#))
+	  q#))))
+
+(defmacro where-dyn-queries
+  "Create a query for a given kind with dynamic query parameters.
+
+  TODO: run the query-parameter-values through translate-to-datastore.
+
+  Ex: (where-dyn-queries person [[:= :person-password-hash \"123\"]])"
+  ([kind queries]
+     `(where-dyn-queries nil ~kind ~queries))
+  ([parent-key kind queries]
+     (let [kind-name (name kind)]
+       `(let [q# (com.google.appengine.api.datastore.Query. ~kind-name)
+              op-smap# {:= com.google.appengine.api.datastore.Query$FilterOperator/EQUAL
+                        :not= com.google.appengine.api.datastore.Query$FilterOperator/NOT_EQUAL
+                        :< com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN
+                        :<= com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN_OR_EQUAL
+                        :> com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN
+                        :>= com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN_OR_EQUAL
+                        :in com.google.appengine.api.datastore.Query$FilterOperator/IN}
+              op-queries# (map (fn [query#] (replace op-smap# query#)) ~queries)]
+	  (when ~parent-key
+            (.setAncestor q# ~parent-key))
+	  (doseq [[operator# prop# value#] op-queries#]
+	    (. q# addFilter (name prop#) (eval operator#) value#))
+	  q#))))
+
+(defn get-by-keys
+  "For a list of keys fetch the entities and return a map of key to entry"
+  [#^java.util.Collection keys]
+  (-> keys
+      get-entities-by-keys
+      (translate-map-vals (comp translate-from-datastore entity-to-map))))
+
+(defn get-by-key
+  "For a single key return the datastore entity"
+  [key]
+  (-> key
+      get-entity-by-key
+      entity-to-map
+      translate-from-datastore))
+
+(defn resolve-entities
+  "For a sequence of entities 'resolve' other entities that are referenced by
+   keys.
+
+   The function first selects all distinct keys from the given attributes.
+   Then a batch get for all keys is done and afterwards all entities for these keys
+   are assigned to the original entities."
+  ([entities attr]
+     (resolve-entities entities attr attr))
+  ([entities attr target-attr]
+     (-> (distinct-entity-keys entities attr)
+         get-by-keys
+         (replace-map-vals entities attr target-attr))))

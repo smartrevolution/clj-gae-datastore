@@ -1,0 +1,56 @@
+<project name="clj-gae-datastore" basedir="." default="jar">
+  <property name="src.dir" value="src/main/clojure/" />
+  <property name="test.dir" value="src/test/clojure/" />
+  <property name="target.dir" value="target" />
+  <property name="classes.dir" value="${target.dir}/classes" />
+  <property name="libs.dir" value="" />
+  <property name="appengine.dir" value="" />
+  <property name="docs.dir" value="${target.dir}/docs" />
+  <property name="version" value="0.1" />
+  <property name="jar.file" value="${target.dir}/${ant.project.name}-${version}.jar" />
+  <property name="jar.binary.file" value="${target.dir}/${ant.project.name}-bin-${version}.jar" />
+
+  <target name="clean">
+    <delete dir="${target.dir}" />
+  </target>
+  
+  <target name="init">
+    <mkdir dir="${target.dir}"/>
+    <mkdir dir="${classes.dir}"/>
+  </target>
+
+  <path id="project.classpath">
+    <pathelement path="${src.dir}" />
+    <pathelement path="${classes.dir}" />
+    <fileset dir="${appengine.dir}">
+      <include name="**/*.jar" />
+    </fileset>
+    <fileset dir="${libs.dir}">
+      <include name="**/*.jar" />
+    </fileset>
+  </path>
+  
+  <target name="compile" depends="init">
+    <java classname="clojure.lang.Compile" classpathref="project.classpath" failonerror="true">
+      <sysproperty key="clojure.compile.path" value="${classes.dir}" />
+      <arg value="com.freiheit.clojure.util.date"/>
+      <arg value="com.freiheit.clojure.util.exceptions"/>
+      <arg value="com.freiheit.gae.datastore.datastore-access-dsl"/>
+      <arg value="com.freiheit.gae.datastore.datastore-query-dsl"/>
+      <arg value="com.freiheit.gae.datastore.datastore-types"/>
+      <arg value="com.freiheit.gae.datastore.keys"/>
+      <arg value="com.freiheit.gae.datastore.transactions"/>
+    </java>
+  </target>
+
+  <target name="jar" description="Create jar file" depends="init">
+    <jar jarfile="${jar.file}" index="true">
+      <fileset dir="${src.dir}" 
+	       includes="**/*.clj"/>
+    </jar>
+  </target>
+
+  <target name="binary-jar" description="Create jar file" depends="clean, compile">
+    <jar jarfile="${jar.binary.file}" index="true" basedir="${classes.dir}"/>
+  </target>
+</project>
