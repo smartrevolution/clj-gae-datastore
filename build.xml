@@ -53,4 +53,13 @@
   <target name="binary-jar" description="Create jar file" depends="clean, compile">
     <jar jarfile="${jar.binary.file}" index="true" basedir="${classes.dir}"/>
   </target>
+
+
+  <target name="doc" description="Creates api doc">
+    <mkdir dir="${docs.dir}"/>
+    <java classname="clojure.main" classpathref="project.classpath" failonerror="true">
+      <arg value="${src.dir}/com/freiheit/clojure/util/genapidoc.clj"/>
+      <arg value="${docs.dir}/api.html"/>
+    </java>
+  </target>
 </project>
