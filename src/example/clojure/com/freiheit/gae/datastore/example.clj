@@ -14,7 +14,7 @@
 
 (datastore/defentity book
   [:key]
-  [:title]
+  [:title :unindexed true] ; :unindexed is not evaluated at the moment
   [:author]
   [:publisher]
   [:isbn]
@@ -59,6 +59,11 @@
   (let [book (first (load-books-from-datastore))]
     (datastore/update-entities! [(datastore/assoc-entity book :outofprint "yes")])))
 
+(defn delete-books-from-datastore
+  []
+  (let [keys (query/select-only-keys (query/where book []))]
+    (datastore/delete-all! keys)))
+
 (defn init-app-engine
   "Initialize the app engine services. Call it once from the REPL"
   ([]
@@ -80,6 +85,6 @@
 		       (getPort [] default-port)
 		       (waitForServerToStart [] nil))
 	   api-proxy (.create (ApiProxyLocalFactory.) local-env)]
-	  (do
-	    (com.google.apphosting.api.ApiProxy/setEnvironmentForCurrentThread env-proxy)
-	    (com.google.apphosting.api.ApiProxy/setDelegate api-proxy)))))
+       (do
+	 (com.google.apphosting.api.ApiProxy/setEnvironmentForCurrentThread env-proxy)
+	 (com.google.apphosting.api.ApiProxy/setDelegate api-proxy)))))

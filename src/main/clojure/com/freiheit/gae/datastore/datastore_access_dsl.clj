@@ -38,11 +38,12 @@
 ;;;;   GAE datastore, it has to be translated, because the datastore can only handle
 ;;;;   a fixed set of datastructures. If you want to store an instance of a type which is not supported
 ;;;;   by the datastore, you have to translate it to a supported datatype. Example: If
-;;;;   you want to store java.util.Date, you have to translate it into Millis (long) before saving it.
-;;;;   When you retrieve it from the datastore, you have to translate it back from Millis to
+;;;;   you want to store java.util.Date (which is a supported type, but just to give you an easy example),
+;;;;   you might want to translate it into Millis (long) before saving it (pre-save).
+;;;;   When you retrieve it from the datastore (post-load), you have to translate it back from Millis to
 ;;;;   java.util.Date. So in this file, the word "translation" has nothing to do with I18N etc.
 
-;;;; We made it really easy to define translations. You just use the Macro defentity.
+;;;; We made it really easy to define such translations. You just use the Macro defentity.
 ;;;; It takes a list of clauses. Each clause contains a key and optional one or two
 ;;;; translation functions. The first one is the translate-to-datastore and the second one is the
 ;;;; translate-from-datastore function. The translation-function can also contain validations or other
@@ -163,10 +164,6 @@
 ;; parsing the access dsl
 ;; ------------------------------------------------------------------------------
 
-(defn- is-allowed-callback-specifier?
-  [callback-specifier]
-  (or (= callback-specifier :pre-save) (= callback-specifier :post-load)))
-
 (defn- field-clauses
   [clauses]
   (take-while vector? clauses))
@@ -175,38 +172,49 @@
   [clauses]
   (drop-while vector? clauses))
 
-(defn- destructure-clause
-  "[:field :pre-save #func1 :post-load #func2] --> {:attr-name :field :pre-save #func1 :post-load func2}"
-  ([attr-name]
-     (if (keyword? attr-name)
-       {:attr-name attr-name}
-       (throw (IllegalArgumentException.
-               (str "The attr-name is not a keyword: " attr-name)))))
-  ([callback-specifier callback-fn]
-     (if (and (keyword? callback-specifier) (is-allowed-callback-specifier? callback-specifier))
-       {callback-specifier callback-fn}
-       (throw (IllegalArgumentException.
-             (str "The callback1-specifier is not a keyword or a wrong keyword: " callback-specifier)))))
-  ([attr-name callback-specifier callback-fn]
-     (merge (destructure-clause attr-name)
-            (destructure-clause callback-specifier callback-fn)))
-  ([attr-name callback1-specifier callback1-fn callback2-specifier callback2-fn]
-     (merge (destructure-clause attr-name)
-            (destructure-clause callback1-specifier callback1-fn)
-            (destructure-clause callback2-specifier callback2-fn))))
+
+(defn- validate-field-option
+  "Returns the option, if it is valid or throws and IllegalArgumentException"
+  [option]
+  (if (or (= option :pre-save)
+	  (= option :post-load)
+	  (= option :unindexed))
+    option
+    (throw (IllegalArgumentException.
+	    (str "This option is not valid (Try :pre-save, :post-load or :unindexed instead): " option)))))
+
+
+(defn- destructure-field-clause
+  "[:field :pre-save #pre-save-func :post-load #post-load-func :unindexed bool]
+--> {:attr-name :field, :pre-save #pre-save-func, :post-load #post-load-func :unindexed bool}"
+  [clause]
+  (if (and (> (count clause) 0)
+	   (odd? (count clause)))
+    (let [mapped-clause {:attr-name (keyword (first clause))}
+	  options (partition 2 (rest clause))]
+      (reduce (fn [left right]
+		(assoc left (validate-field-option (keyword (first right))) (last right)))
+	      mapped-clause
+	      options))
+    (throw (IllegalArgumentException.
+	    (str "Malformed clause: " clause)))))
+
 
 (defn- transform-clauses
-  "list of {:attr-name :field :pre-save #func1 :post-load func2} --> list of {:field {:pre-save #func1 :post-load #func2}}"
+  "list of {:attr-name :field, :pre-save #pre-save-func, :post-load #post-load-func, :unindexed bool}
+--> list of {:field {:pre-save #pre-save-func, :post-load #post-load-func, :unindexed bool}}"
   [clauses]
-  (map #(apply destructure-clause %) clauses))
+  (map #(destructure-field-clause %) clauses))
 
 (defn- build-fn-lookup-table
-  "list of {:field {:pre-save #func1 :post-load #func2}} --> one single hashmap of {:field1 {:pre-save #func1 :post-load #func2}, ... :field2 {...}}"
+  "list of {:field {:pre-save #pre-save-func, :post-load #post-load-func, :unindexed bool}}
+--> one single hashmap of {:field1 {:pre-save #pre-save-func :post-load #post-load-func :unindexed bool}, ... :field2 {...}}"
   [clauses]
   (reduce (fn [left right]
             (assoc left (:attr-name right) (dissoc right :attr-name)))
           {}
           (transform-clauses (field-clauses clauses))))
+
 
 (defn- build-allowed-keys
   "Erzeugt eine Liste der keys, die mit defentity deklariert wurden."
@@ -215,7 +223,6 @@
 
 (defn- build-options-table
   "build the options table. at the moment only contains :pre-save and :post-load as for the field declarations.
-
    Returns a map of :pre-save and :post-load."
   [clauses]
   ;; at the moment just pretend we have a [:options :pre-save ... :post-load ...] clause to use the
@@ -286,14 +293,12 @@ update-entity and used assoc or something else instead."
   (.write writer (str "#=(com.google.appengine.api.datastore.KeyFactory/stringToKey \"" (KeyFactory/keyToString val) "\")")))
 
 (defn set-parent-for-map
-  "set the parent for a struct map representing an in-memory-entity before storing to datastore. only public because
-   used in a macro"
+  "Get the parent for a struct map representing an in-memory-entity before storing to datastore."
   [parent-key m]
   (assoc m :parent-key parent-key))
 
 (defn get-parent-for-map
-  "get the parent for a struct map representing an in-memory-entity before storing to datastore. only public because
-   it is used in macro."
+  "Get the parent for a struct map representing an in-memory-entity before storing to datastore."
   [m]
   (:parent-key m))
 
