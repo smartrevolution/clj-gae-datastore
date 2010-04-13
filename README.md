@@ -19,6 +19,9 @@ data as follows:
                      "yes"
                      "no")])
 
+Storing Data
+------------
+
 Storing a book in the datastore can be done via `store-entities!`.
 
     com.freiheit.gae.datastore.example> (store-entities! [(make-book :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp"    		   
@@ -31,6 +34,9 @@ result:
 
     ({:outofprint "no", :pages 946, :isbn "978-1558601918", :publisher "Morgan Kaufmann", :author "Peter Norvig", :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp", :key #<Key book(1)>, :parent-key nil, :kind "book"})
 
+Querying the Datastore
+----------------------
+
 The data can be queried via a very simple query language that is also provided in the
 library. To find all books by a certain author just use the following code:
 
@@ -39,6 +45,39 @@ library. To find all books by a certain author just use the following code:
 result:
 
     ({:outofprint "no", :pages 946, :isbn "978-1558601918", :publisher "Morgan Kaufmann", :author "Peter Norvig", :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp", :key #<Key book(1)>, :parent-key nil, :kind "book"})
+
+Changing Data in the Datastore
+------------------------------
+
+Of course you need to able to change data that is already in the datastore. The API contains a function called `assoc-entity` that can be used to change the values of an entity. It also does some bookkeeping that marks an entity as changed. Please note that `assoc-entity` doesn't change the entity in the datastore. This is done with `update-entities!`.
+
+     com.freiheit.gae.datastore.example> (let [book (first (select (where book ([= :author "Peter Norvig"]))))
+                                               unavailable-book (assoc-entity book :outofprint "yes")]
+                                              (update-entities! [unavailable-book]))
+
+result:
+     
+    ({:outofprint "yes", :pages 946, :isbn "978-1558601918", :publisher "Morgan Kaufmann", :author "Peter Norvig", :title "Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp", :key #<Key book(1)>, :parent-key nil, :kind "book"})
+
+Deleting Data in the Datastore
+------------------------------
+
+Data that needs to be deleted in the datastore is identified by its key. So, in order to delete all books in the datastore just get the keys of all books in the datastore and call `delete-all!`.
+
+    com.freiheit.gae.datastore.example> (let [keys (map :key (select (where book [])))]
+                                             (delete-all! keys))
+
+result:
+
+    ()
+
+A query for all books verifies that indeed all entities are removed from the datastore:
+
+    com.freiheit.gae.datastore.example> (select (where book []))
+
+result:
+
+    ()
 
 I need to try this!
 ===================

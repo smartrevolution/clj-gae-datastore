@@ -54,6 +54,11 @@
   []
   (query/select (query/where book ([= :author "Peter Norvig"]))))
 
+(defn change-book-in-datastore
+  []
+  (let [book (first (load-books-from-datastore))]
+    (datastore/update-entities! [(datastore/assoc-entity book :outofprint "yes")])))
+
 (defn init-app-engine
   "Initialize the app engine services. Call it once from the REPL"
   ([]
