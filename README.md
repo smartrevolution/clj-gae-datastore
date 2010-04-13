@@ -102,9 +102,12 @@ For more information about setting up Clojure, Emacs and Google App Engine have 
 Creating a library
 ==================
 
-Just type "ant jar" to create a jar file of the datastore library.
+Just type `ant jar` to create a jar file of the datastore library.
 
 If you want to create a jar of the compiled files type "ant binary-jar". This should be done after copying
 the dependent jar files into `"lib"` (see above.)
 
- 
+Generate API documentation
+==========================
+
+You can generate API documentation by typing `ant doc`. It will be available in `target/docs/api.html`.
