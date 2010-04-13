@@ -152,13 +152,6 @@
     (entity-for-item item)
     (to-entity item)))
 
-(defn- save-entity!
-  "Save an entity to the datastore."
-  [#^com.google.appengine.api.datastore.Entity entity]
-  (if-not (nil? entity)
-   (.put (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService) entity))
-  entity)
-
 (defn- save-entities!
   "Save a collection of entities to the datastore."
   [#^java.util.Collection entities]
