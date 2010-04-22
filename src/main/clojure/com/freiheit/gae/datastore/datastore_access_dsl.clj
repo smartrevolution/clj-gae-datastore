@@ -15,8 +15,7 @@
 ;; along with clj-gae-datastore.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns com.freiheit.gae.datastore.datastore-access-dsl
-  #^{:doc "Functions and macros for defining entities to be stored in
-           the google appengine datastore."}
+  #^{:doc "A mini-language to access the Google AppEngine datastore."}
   (:use [clojure.contrib def ns-utils]
         [com.freiheit.gae.datastore.datastore-query-dsl 
          :only [to-entity translate-to-datastore translate-from-datastore entity-to-map]])
@@ -34,6 +33,13 @@
 
 ;;;; * Entity: An Entity is a record or a struct of data that is stored in the GAE datastore.
 
+;;;; * Variable and Parameter naming:
+;;;;   When we use "entity", we always mean objects of the GAE class Entity
+;;;;   When we use "entity-map" we always mean a Clojure map which can be converted
+;;;;   to an "entity", because it was defined with defentity and is maintained by the
+;;;;   functions and macros of this package.
+
+
 ;;;; * Translate: In Clojure you can use normal structs. Before you can store a struct into the
 ;;;;   GAE datastore, it has to be translated, because the datastore can only handle
 ;;;;   a fixed set of datastructures. If you want to store an instance of a type which is not supported
@@ -44,10 +50,30 @@
 ;;;;   java.util.Date. So in this file, the word "translation" has nothing to do with I18N etc.
 
 ;;;; We made it really easy to define such translations. You just use the Macro defentity.
-;;;; It takes a list of clauses. Each clause contains a key and optional one or two
-;;;; translation functions. The first one is the translate-to-datastore and the second one is the
-;;;; translate-from-datastore function. The translation-function can also contain validations or other
-;;;; transformations of the data, like changing a string to lower-case.
+;;;; It takes a list of clauses. Each clause contains an attribute-name and (optional) options.
+
+;;;; Valid options are:
+;;;; Name         Value         Description
+;;;; :pre-save    a function    Called for this attribute before an entity is saved to the datastore
+;;;;                            Default is the identity function    
+;;;; :post-load   a function    Called for this attribute after an entity is loaded from the datastore
+;;;;                            Default is the identity function
+;;;; :unindexed   boolean       If true, this attribute is not indexed. If false, it will be indexed.
+;;;;                            Default is false. This means the attribute will be indexed if the GAE type
+;;;;                            supports indexing.
+
+;;;; Under the hood we generate two multimethods (translate-to-datastore, translate-from-datastore) for
+;;;; each defentity definition, which specialize on the kind of an entity/entity-map. These multimethods
+;;;; are used to by this system to call your pre-save and post-load functions.
+;;;; Check out the macro defentity for how they are generated.
+
+;;;; You should not use these multimethods in you programs, but you can use them for debugging purposes:
+
+(comment
+  (translate-from-datastore <your-entity-goes-here>) ; DON'T RELY ON THIS IN YOU CODE. IT MIGHT CHANGE!
+  (translate-to-datastore <your-entity-goes-here>)) ; SHOULD ONLY BE USED BY THIS PACKAGE!
+
+
 ;;;; An entity is processed in the following steps:
 ;;;;
 ;;;; Loading from the datastore:
@@ -56,15 +82,13 @@
 ;;;; Storing in the datastore:
 ;;;; entity -> translate-entity (pre-save) -> translate attributes -> store -> datastore
 
-;;;; If you don't supply a translation-function, then the identity function is used.
-
 ;;;; We supplied some standard translations for the currently supported GAE datatypes, too.
 
 
 ;;;; Using defentity
 ;;;; ---------------
 
-;;;; Entities that should be stored in the datastore are defined as follows:
+;;;; To define the schema of an entity, you use defentity.
 
 (comment
   "This defines an Entity named project, with two properties, :key and :title"
@@ -73,29 +97,42 @@
     [:title :pre-save to-text :post-load from-text]
     :options []))
 
+;;;; CAUTION: Currently we don't evaluate the options-statement (see last line in the above example)
 
-;;;; The defentity-Macro automatically generates some functions:
+;;;; This creates the code to generate and convert objects of the GAE class Entity. This example
+;;;; generates a function "make-project", which can be used to create entity-maps of the kind "project".
 
-;;;; This creates an in-memory struct-map of the type project with the attribute :title set.
-;;;; Your entity is not saved to the datastore.
+;;;; The following code creates an in-memory entity-map of the kind "project" with the attribute :title set
+;;;; to "Project1".
+;;;; Your entity-map is not saved to the datastore.
 
 (comment
   (make-project :title "Project1"))
 
-;;;; create a new datastore-entry of the kind "project". The value of the attribute :title
-;;;; is translated from String to a GAE Text type type (and is therefore not indexed).
-;;;; This saves your Entity to the datastore (persistence = side-effect!).
+;;;; If you want to convert this to an entity object you can call to-entity. This is a
+;;;; multimethod that is generated by defentity and which "knows" how to generate
+;;;; a GAE Entity of this kind. But you should never use it in your code. 
+;;;; You can use it for debugging.
 
 (comment
-  (create-project (make-project :title "Project1")))
+  (to-entity (make-project :title "Project1"))) ;DON'T RELY ON to-entity IN YOUR CODE. IT MIGHT CHANGE!
 
-;;;; In addition to that, you will find two generated Multi-Methods in your namespace. They are
-;;;; used under the hood for the translation. You don't need to call them directly. It is
-;;;; all done automatically. They have no side-effects.
+;;;; You NEVER work with entities (objects of class Entity) in your Clojure programs.
+;;;; You should only work with entity-maps, which are standard Clojure struct-maps.
+
+;;;; CHANGING DATA.
+;;;;
+;;;; Changing data in entity-maps should not be done directly via (assoc ...) but by using the
+;;;; (assoc-and-track-changes ...) function. This keeps a log of changes in the meta-data
+;;;; of the returned entity-map and can therefore be used to check if an entity-map needs
+;;;; to be updated in the datastore.
+
+;;;; If you want to save soemthing to the datastore, you are using the store!-function
+;;;; You just hand-over an entity-map. The system converts this automatically to an entity
+;;;; of the correct kind and stores that into the datastore.
 
 (comment
-  (translate-from-datastore <your-entity-goes-here>)
-  (translate-to-datastore <your-entity-goes-here>))
+  (store! (make-project :title "Project1")))
 
 ;;;; RELATIONSHIPS BETWEEN ENTITIES
 ;;;;
@@ -105,53 +142,46 @@
 ;;;; creates a function called (phases-for-project-id [project-key queries]) which can be used
 ;;;; to query the datastore for phases that are children of the given parent-key.
 ;;;; creates a function called (project-id-of-phase [phase]) which returns the id for a phase
-;;;;
-;;;;
-
-;;;; CHANGING DATA.
-;;;;
-;;;; Changing data in entities should not be done directly via (assoc ...) but by using the
-;;;; (change ...) function. This keeps a log of changes in the returned entity and can therefore
-;;;; be used to check if an entity needs to be updated in the datastore.
 
 ;; ------------------------------------------------------------------------------
 ;; private functions
 ;; ------------------------------------------------------------------------------
 
-(defn- create-new-entity
-  "Create a new entity in memory to be stored in the datastore. No attributes are set
-   yet."
+(defn- create-empty-entity
+  "Create an empty entity in memory to be stored in the datastore. No attributes are set yet."
   ([#^Key key]
      (Entity. key))
-  ([#^String kind #^Key parent-key #^String name]
+  ([#^String kind #^Key parent-key #^String key-name]
      (if parent-key
-       (if name
-         (Entity. kind name parent-key)
+       (if key-name
+         (Entity. kind key-name parent-key)
          (Entity. kind parent-key))
-       (if name
-         (Entity. kind name)
+       (if key-name
+         (Entity. kind key-name)
          (Entity. kind)))))
 
 (defn- set-properties
   "Set the properties of the entity with the attributes of the item."
-  [entity item]
-  (doseq [[prop-name value] (dissoc item :key)] (.setProperty entity (name prop-name) value))
+  [entity entity-map]
+  (doseq [[prop-name value] (dissoc entity-map :key)] (.setProperty entity (name prop-name) value))
   entity)
 
-(defn- entity-for-item
-  "Create an entity for a map that represents an existing entity in the datastore. Uses the stored key."
-  [item]
+(defn- entitymap-to-new-entity 
+  "Converts an entity-map to an entity. Uses the key contained in the entity-map to
+construct a fresh new Entity to be stored for the first time in the datastore."
+  [entity-map]
   (->
-   (create-new-entity (:key item))
-   (set-properties item)))
+   (create-empty-entity (:key entity-map))
+   (set-properties entity-map)))
 
-(defn- entity-for-item-when-existing
-  [item]
-  "Create an entity for a map that represents an existing entity in the datastore if it already exists.
-   Otherwise create a new entity."
-  (if (:key item)
-    (entity-for-item item)
-    (to-entity item)))
+(defn- entitymap-to-entity 
+  [entity-map]
+  "Converts an entity-map to an entity. When a key exists, don't create a new one!
+This means we create a fresh new entity, if the key is not already set. If we have
+a key, we keep it, so that the system will update the already existing data in the datastore."
+  (if (:key entity-map)
+    (entitymap-to-new-entity entity-map)
+    (to-entity entity-map)))
 
 (defn- save-entities!
   "Save a collection of entities to the datastore."
@@ -161,7 +191,7 @@
   entities)
 
 ;; ------------------------------------------------------------------------------
-;; parsing the access dsl
+;; parsing the access dsl (private, too!)
 ;; ------------------------------------------------------------------------------
 
 (defn- field-clauses
@@ -217,12 +247,15 @@
 
 
 (defn- build-allowed-keys
-  "Erzeugt eine Liste der keys, die mit defentity deklariert wurden."
+  "Creates a list of the keys that were defined with a call to defentity.
+   We use it to check which keys from the map should be stored in the datastore
+   to prevent the programmer from adding new properties accidentally."
   [clauses]
   (map first (field-clauses clauses)))
 
+
 (defn- build-options-table
-  "build the options table. at the moment only contains :pre-save and :post-load as for the field declarations.
+  "Build the options table. At the moment only contains :pre-save and :post-load as for the field declarations.
    Returns a map of :pre-save and :post-load."
   [clauses]
   ;; at the moment just pretend we have a [:options :pre-save ... :post-load ...] clause to use the
@@ -245,7 +278,7 @@
                                    `(~k (~v (~k ~msource)))) kfn-pairs)]
   `(assoc ~m ~@with-applied-to-msource))) ;~@(with-applied-to-msource))))
 
-(defn build-conversion-fn
+(defn- build-conversion-fn
   "Build the s-expr for a conversion function from a lookup table"
   [entity-sym kind keys func-name fn-lookup-table]
   (let [key-with-translate-fn     
@@ -255,37 +288,47 @@
     `(merge-with-translation {:kind ~kind} ~entity-sym
        ~@key-with-translate-fn)))
 
-;; ------------------------------------------------------------------------------
-;; public functions
-;; ------------------------------------------------------------------------------
+;;; ------------------------------------------------------------------------------
+;;; public functions
+;;; ------------------------------------------------------------------------------
 
 (defn create-entity
-  "Create a new entity for storing a new element in the datastore."
-  ([#^String kind item] (create-entity kind item nil nil))
-  ([#^String kind item #^Key parent-key]
-     (create-entity kind item parent-key nil))
-  ([#^String kind item #^Key parent-key #^String keyName]
-     (let [entity (create-new-entity kind parent-key keyName)]
-       (set-properties entity item)
+  "Creates a new GAE Entity object from a clojure map. The Entity is created in memory and is not persisted.
+It is only used by the multimethod to-entity (which is generated by defentity) AND SHOULD NOT BE USED ELSEWHERE IN YOUR CODE.
+We leave it as a public function to make it easier for the programmer to create Entity objects for debugging purposes. 
+But please do not rely on it!"
+  ([#^String kind entity-map] (create-entity kind entity-map nil nil))
+  ([#^String kind entity-map #^Key parent-key]
+     (create-entity kind entity-map parent-key nil))
+  ([#^String kind entity-map #^Key parent-key #^String keyName]
+     (let [entity (create-empty-entity kind parent-key keyName)]
+       (set-properties entity entity-map)
        entity)))
 
-;; changing the contents of an entity in-memory
-(defn assoc-entity
-     "Change an Entity. This does some bookkeeping of the changes
-be storing meta-data about the changes. This way we can check, if an entity
-changed and if we have to update it in the datastore, too. You can lookup
-the changes via using (meta <your-entity>)."
-     ([entity & kvs]
-        (with-meta (apply assoc entity kvs) (apply assoc {} kvs) )))
+
+(defn assoc-and-track-changes
+  "Works exactly like assoc on a map, but does some book-keeping of the changes
+be storing the changes in the meta-data. This way we can check, if an entity
+changed and if we have to update it in the datastore, too. This even enables us to
+only send the changed properties to the datastore."
+  ([entity-map & kvs]
+     (with-meta (apply assoc entity-map kvs) (apply assoc {} kvs) )))
 
 
-;;Checking if an entity was changed in-memory
-(defn dirty-entity?
-  "Return true when an entity has been changed by using the function update-entity
-and needs to be saved in the datastore. This won't detect changes, if you did not use
-update-entity and used assoc or something else instead."
-  [entity]
-  (not (empty? (meta entity))))
+(defn has-changes?
+  "Returns true when the entity-map has been changed by using the function assoc-and-track-changes
+and needs to be saved to the datastore. This won't detect changes, if you did not use
+assoc-and-track-changes and used assoc or something else instead to manipulate the entity-map."
+  [entity-map]
+  (not (empty? (meta entity-map))))
+
+(defn changes
+  "Returns only the changed key/values when the entity-map has been changed by using the function assoc-and-track-changes
+and needs to be saved to the datastore. This won't return changes, if you did not use
+assoc-and-track-changes and used assoc or something else instead to manipulate the entity-map."
+  [entity-map]
+  (meta entity-map))
+
 
 ;; for serializing keys
 (defmethod print-dup com.google.appengine.api.datastore.Key
@@ -303,18 +346,16 @@ update-entity and used assoc or something else instead."
   (:parent-key m))
 
 (defmacro defentity
-  "Define an appengine datastore entity."
+  "Define the schema for Google App Engine datastore entity.
+Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unindexed bool] [:attr-name2 ...]...)"
   [entity-name & body]
   (let [allowed-keys (build-allowed-keys body)
         fn-lookup-table (build-fn-lookup-table body)
         options-table (build-options-table body)
-        selection-keys (vec (conj allowed-keys :parent-key))
+        selection-keys (vec (conj allowed-keys :parent-key)) ;FIXME: Better to store parent-key in meta-data!
         kind (str entity-name)]
     `(do
-       (defstruct ~entity-name ~@allowed-keys)
-       (defn ~(symbol (str "create-" (name entity-name)))
-         [~entity-name]
-         (create-entity ~kind (select-keys ~entity-name (vector ~@allowed-keys)) (get-parent-for-map ~entity-name)))
+       (defstruct ~entity-name ~@allowed-keys) 
 
        (defn ~(symbol (str "make-" (name entity-name)))
          [& inits#]
@@ -336,7 +377,8 @@ update-entity and used assoc or something else instead."
 
        (defmethod to-entity ~kind
          [~entity-name]
-         (~(symbol (str "create-" (name entity-name))) ~entity-name)))))
+	 (create-entity ~kind (select-keys ~entity-name (vector ~@allowed-keys)) (get-parent-for-map ~entity-name))))))
+
 
 ;; defining relationships
 (defmacro def-parent-key-relationship [parent child]
@@ -361,8 +403,10 @@ update-entity and used assoc or something else instead."
          [~parent-id-sym & inits#]
          (set-parent-for-map ~parent-id-sym (apply ~(symbol (str "make-" child)) inits#))))))
 
-;; storing a list of elements in the datastore
-(def #^{:doc "Store a list of elements in the datastore."
+
+;;; TODO: the store-functions should be consolidated into one single function
+
+(def #^{:doc "Store a list of entity-maps in the datastore."
         :arglist '[entities]}
      store-entities!
      (comp
@@ -373,27 +417,27 @@ update-entity and used assoc or something else instead."
       (partial map translate-to-datastore)))
 
 (def update-entities!
-     #^{:doc "Update a list of elements in the datastore."
+     #^{:doc "Update a list of entity-maps in the datastore."
         :arglist '[entities]}
      (comp
       (partial map translate-from-datastore)
       (partial map entity-to-map)
       save-entities!
-      (partial map entity-for-item)
+      (partial map entitymap-to-new-entity) ;entity-for-item
       (partial map translate-to-datastore)))
 
 (def store-or-update-entities!
-     #^{:doc "Update or save a list of elements in the datastore."
+     #^{:doc "Update or save a list of entity-maps in the datastore."
         :arglist '[entities]}
      (comp
       (partial map translate-from-datastore)
       (partial map entity-to-map)
       save-entities!
-      (partial map entity-for-item-when-existing)
+      (partial map entitymap-to-entity) ;entity-for-item-when-existing
       (partial map translate-to-datastore)))
 
 (defn delete-all!
-  "Delete all elements specified by the given keys from the datastore."
+  "Delete all entities specified by the given keys from the datastore."
   [#^java.util.Collection keys]
   (let [service (DatastoreServiceFactory/getDatastoreService)
         max-batch-size 500]

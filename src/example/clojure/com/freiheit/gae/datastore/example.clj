@@ -14,7 +14,7 @@
 
 (datastore/defentity book
   [:key]
-  [:title :unindexed true] ; :unindexed is not evaluated at the moment
+  [:title :unindexed true] ;TODO: :unindexed is not evaluated at the moment, but can be specified
   [:author]
   [:publisher]
   [:isbn]
@@ -47,19 +47,29 @@
 		   :outofprint "no")))
 
 (defn save-books-to-datastore
+  "Stores all books from the var *books* to the datastore."
   []
   (datastore/store-entities! *books*))
 
-(defn load-books-from-datastore
+(defn load-all-books-from-datastore
+  "Loads all books from the datastore."
+  []
+  (query/select (query/where book [])))
+
+(defn load-norvig-books-from-datastore
+  "Load all books from the datastore, where the author is 'Peter Norvig'"
   []
   (query/select (query/where book ([= :author "Peter Norvig"]))))
 
 (defn change-book-in-datastore
+  "Renames the author of the first book in the datastore to 'P. Graham'"
   []
-  (let [book (first (load-books-from-datastore))]
-    (datastore/update-entities! [(datastore/assoc-entity book :outofprint "yes")])))
+  (let [book (first (load-all-books-from-datastore))]
+    (datastore/update-entities! [(datastore/assoc-and-track-changes book :author "P. Graham")])))
 
 (defn delete-books-from-datastore
+  "Cleans the datastore by selecting the keys of all books and then using these keys 
+to delete the data."
   []
   (let [keys (query/select-only-keys (query/where book []))]
     (datastore/delete-all! keys)))
