@@ -16,9 +16,12 @@
 
 (ns com.freiheit.gae.datastore.datastore-query-dsl
   #^{:doc "A DSL for querying entities from the google datastore."}
-  (:import [com.google.appengine.api.datastore
-	    DatastoreServiceFactory Entity Key KeyFactory Query Query$FilterOperator
-            EntityNotFoundException FetchOptions$Builder]))
+  (:use
+   [clojure.contrib.def :only [defvar-]])
+  (:import
+   [com.google.appengine.api.datastore
+    DatastoreServiceFactory Entity Key KeyFactory Query Query$FilterOperator
+    EntityNotFoundException FetchOptions FetchOptions$Builder Cursor]))
 
 ;;;; Querying entities from the google datastore.
 ;;;; Provides a query-language which can be used to
@@ -43,22 +46,42 @@
 ;;;;     the select clause, and afterwards doing a "batch get" operation. this is more efficient
 ;;;;     than doing single queries.
 
+;; ------------------------------------------------------------------------------
+;; constants and data structures
+;; ------------------------------------------------------------------------------
+
+(defn- fetch-options
+  "Create fetch options for a query with the given limit and an optional websafe cursor.
+  The cursor is ignored if it is nil."
+  ([#^Number limit]
+     (fetch-options limit nil))
+  ([#^Number limit #^String cursor]
+     (let [limit-options (FetchOptions$Builder/withLimit limit)]
+       (if (nil? cursor)
+         limit-options
+         (->> (Cursor/fromWebSafeString cursor)
+              (.cursor limit-options))))))
+
+(defvar- *default-fetch-options* (fetch-options 1000))
+
 
 ;; ------------------------------------------------------------------------------
 ;; private functions
 ;; ------------------------------------------------------------------------------
+
 (defn- mapmap
-  "create a new map by applying key-f to every key and val-f to every value of a map"
+  "Create a new map by applying key-f to every key and val-f to every value of a map"
   [key-f val-f m]
   (apply merge (map (fn [[k v]] {(key-f k) (val-f v)}) m)))
 
-(let [fetch-options (FetchOptions$Builder/withLimit 1000)]
-  (defn- execute-query
-    "Execute the datastore query."
-    [#^Query query]
-    (let [data-service (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService)
-          results (. (.prepare data-service query) asList fetch-options)]
-      results)))
+(defn- execute-query
+  "Execute the datastore query. Uses the default fetch options if none are given."
+  ([#^Query query]
+     (execute-query query *default-fetch-options*))
+  ([#^Query query #^FetchOptions fetch-options]
+     (let [data-service (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService)
+           results (. (.prepare data-service query) asQueryResultList fetch-options)]
+       results)))
 
 (defn- distinct-entity-keys
   "resolving an id property for a list of elements."
@@ -70,7 +93,7 @@
                                         entities))))
 
 (defn- translate-map-vals
-  "apply the given function to all values in the map."
+  "Apply the given function to all values in the map."
   [m function]
   (mapmap identity function m))
 
@@ -86,9 +109,11 @@
 
 (def mem-keyword (memoize keyword))
 
+
 ;; ------------------------------------------------------------------------------
 ;; public functions
 ;; ------------------------------------------------------------------------------
+
 (defn entity-to-map
   "Converts an instance of com.google.appengine.api.datastore.Entity
   to a PersistentHashMap with properties stored under keyword keys,
@@ -123,7 +148,7 @@
 
 (defn translate-entities
   "Translate the attributes of entities with the translation functions from datastore to
-   the actual domain model."
+  the actual domain model."
   [entities]
   (doall (map (comp translate-from-datastore entity-to-map) entities)))
 
@@ -148,6 +173,20 @@
              (.setKeysOnly)
              execute-query
              translate-keys-only)))
+
+(defn select-batch
+  "Executes the given com.google.appengine.api.datastore.Query with a fetch options
+  limit and an optional cursor information to resume a previous batch select.
+
+  The return value is a map containing the query result list and a cursor to resume
+  the query at the last postion."
+  ([#^Query query #^Number limit]
+     (select-batch query limit nil))
+  ([#^Query query #^Number limit #^String cursor]
+     (let [query-result (->> (fetch-options limit cursor)
+                             (execute-query query))]
+       {:result (translate-entities query-result)
+        :cursor (.. query-result getCursor toWebSafeString)})))
 
 (defmacro where
   "Create a query for a given kind.
