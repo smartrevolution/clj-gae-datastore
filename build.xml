@@ -33,7 +33,6 @@
   <target name="compile" depends="init">
     <java classname="clojure.lang.Compile" classpathref="project.classpath" failonerror="true">
       <sysproperty key="clojure.compile.path" value="${classes.dir}" />
-      <arg value="com.freiheit.clojure.util.date"/>
       <arg value="com.freiheit.clojure.util.exceptions"/>
       <arg value="com.freiheit.gae.datastore.datastore-access-dsl"/>
       <arg value="com.freiheit.gae.datastore.datastore-query-dsl"/>
