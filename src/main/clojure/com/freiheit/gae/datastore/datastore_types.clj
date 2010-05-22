@@ -17,10 +17,10 @@
 (ns com.freiheit.gae.datastore.datastore-types
   #^{:doc "Translation functions for different datastore types."}
   (:require 
-   [com.freiheit.clojure.util.date :as date]
    [com.freiheit.gae.datastore.keys :as keys])
   (:import 
-   [com.google.appengine.api.datastore Key Text Email]))
+   [com.google.appengine.api.datastore Key Text Email]
+   [org.joda.time DateTime DateTimeZone]))
 
 ;;;; Some translation functions for the datastore api
 
@@ -36,13 +36,27 @@
   [#^com.google.appengine.api.datastore.Text t]
   (.getValue t))
 
+; taken from removed date.clj (see http://github.com/choas/clj-gae-datastore/commit/bcfca2d6504707af6e3f26a1310ca83a52ae008f )
+(defn- date-from-ms 
+  "Create a date from milliseconds from epoch."
+  ([ms]
+     (DateTime. (long ms)))
+  ([ms timezone]
+     (.. (DateTime. (long ms)) (withZoneRetainFields (DateTimeZone/forID timezone)))))
+
+; taken from removed date.clj (see http://github.com/choas/clj-gae-datastore/commit/bcfca2d6504707af6e3f26a1310ca83a52ae008f )
+(defn- date-to-ms
+  "Get the milliseconds from epoch for the given date."
+  [date]
+  (.getMillis date))
+
 (defn to-ms
   [#^org.joda.time.Datetime date-time]
-  (date/date-to-ms date-time))
+  (date-to-ms date-time))
 
 (defn from-ms
   [#^Long ms]
-  (date/date-from-ms ms))
+  (date-from-ms ms))
 
 (defn to-e-mail
   [#^String e-mail-str]

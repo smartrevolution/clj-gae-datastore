@@ -1,0 +1,4 @@
+clj-gae-datastore*.jar
+*~
+lib/*
+pom.xml

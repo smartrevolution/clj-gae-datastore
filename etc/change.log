@@ -1,3 +1,10 @@
+2010-05-22 leiningen and a bugfix
+	- forked smartrevolution/clj-gae-datastore
+	
+	- added project.clj for leiningen
+
+	- bugfix: added missing date.clj (removed by previous version)
+
 Some minor refactorings and improvement of inline-documentation.
 
 	- Removed the generation of "create-<entity-name>" from the defentity-macro
