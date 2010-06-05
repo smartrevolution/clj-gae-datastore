@@ -1,16 +1,26 @@
-lein deps true
-lein jar
-
-
-
 About clj-gae-datastore
 =======================
 
 About this version:
+-------------------
+
 - forked smartrevolution/clj-gae-datastore
+
 - added leiningen support: lein jar
-- uploaded to clojare
+
+- uploaded to clojars
+
 - [org.clojars.choas/clj-gae-datastore "0.1"]
+
+
+Building
+--------
+
+Get all dependencies and build the jar:
+
+    lein deps true
+    lein jar
+
 
 ----
 
