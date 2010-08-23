@@ -75,6 +75,10 @@
   [#^com.google.appengine.api.datastore.Text t]
   (read-string (.getValue t)))
 
+(defn to-vector
+  [obj]
+  (into [] obj))
+
 (defn with-default
   "Executes the conversions with the given nil-val if a nil value is provided for the function."
   [f nil-val]
