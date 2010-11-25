@@ -390,8 +390,8 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
        (defmacro ~(symbol (str child "s-for-" parent "-id"))
          [~parent-id-sym ~query-sym]
          `(when ~~parent-id-sym
-            (com.freiheit.clojure.datastore.datastore-query-dsl/select
-             (com.freiheit.clojure.datastore.datastore-query-dsl/where ~~parent-id-sym ~~child ~~query-sym))))
+            (com.freiheit.gae.datastore.datastore-query-dsl/select
+             (com.freiheit.gae.datastore.datastore-query-dsl/where ~~parent-id-sym ~~child ~~query-sym))))
        ;; ex: release-id-of-phase
        (defn ~(symbol (str parent "-id-of-" child))
          [~child]
