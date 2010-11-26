@@ -383,15 +383,16 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
 ;; defining relationships
 (defmacro def-parent-key-relationship [parent child]
   (let [parent-id-sym (symbol (str parent "-id"))
-        query-sym (symbol "queries")
-        child-sym (symbol child)]
+        query-sym (symbol "queries")]
     `(do
        ;; ex: phases-for-release-id
        (defmacro ~(symbol (str child "s-for-" parent "-id"))
          [~parent-id-sym ~query-sym]
          `(when ~~parent-id-sym
             (com.freiheit.gae.datastore.datastore-query-dsl/select
-             (com.freiheit.gae.datastore.datastore-query-dsl/where ~~parent-id-sym ~~child ~~query-sym))))
+             (com.freiheit.gae.datastore.datastore-query-dsl/where ~~parent-id-sym
+                                                                   ~(quote ~child)
+                                                                   ~~query-sym))))
        ;; ex: release-id-of-phase
        (defn ~(symbol (str parent "-id-of-" child))
          [~child]
