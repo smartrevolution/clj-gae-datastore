@@ -25,6 +25,10 @@
 		 "yes"
 		 "no")])
 
+(datastore/defentity person
+  [:key]
+  [:name] 
+  [:books])
 
 (def *books*
   (list (make-book :title "On Lisp"
@@ -60,6 +64,21 @@
   "Load all books from the datastore, where the author is 'Peter Norvig'"
   []
   (query/select (query/where book ([= :author "Peter Norvig"]))))
+
+(defn save-person-to-datastore
+  "Stores some users into the datastore"
+  []
+  (datastore/store-entities! [(make-person :books (map :key (load-norvig-books-from-datastore)))]))
+
+(defn load-all-persons-from-datastore
+  "Load all persons from the datastore"
+  []
+  (query/select (query/where person [])))
+
+(defn load-all-persons-with-books
+  "Load all persons and resolve the book keys"
+  []
+  (query/resolve-entities (load-all-persons-from-datastore) :books))
 
 (defn change-book-in-datastore
   "Renames the author of the first book in the datastore to 'P. Graham'"
