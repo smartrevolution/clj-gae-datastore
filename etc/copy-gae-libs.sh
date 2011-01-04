@@ -1,7 +1,7 @@
 #!/bin/sh
 
-LIBS="user/appengine-api-1.0-sdk-1.3.2.jar \
-    user/appengine-api-labs-1.3.2.jar \
+LIBS="user/appengine-api-1.0-sdk-*.jar \
+    user/appengine-api-labs-*.jar \
     impl/appengine-api.jar \
     impl/appengine-local-runtime.jar \
     impl/appengine-api-stubs.jar"
