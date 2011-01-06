@@ -91,6 +91,7 @@ directory `"lib"`.
 - joda-time-1.6.jar
 - some libraries from the Google App Engine SDK. You can use the small script "etc/copy-gae-libs.sh" to 
   do this.
+- clj-datetime-bin-0.1.jar (this jar is already included in the lib directory)
 
 Open the `src/example/clojure/com/freiheit/gae/datastore/example.clj` file in Emacs and use 
 swank-clojure-project to setup a Clojure session. Compile the
@@ -98,6 +99,8 @@ file and execute (init-app-engine) in the REPL. Now you should be able to play w
 
 For more information about setting up Clojure, Emacs and Google App Engine have a look at our
 [blog post](http://www.hackers-with-attitude.com/2009/08/intertactive-programming-with-clojure.html).
+
+Please note that clj-gae-datastore is not yet working with Clojure >= 1.2.0.
 
 Creating a library
 ==================
