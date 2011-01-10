@@ -6,7 +6,7 @@
   <property name="libs.dir" value="" />
   <property name="appengine.dir" value="" />
   <property name="docs.dir" value="${target.dir}/docs" />
-  <property name="version" value="0.1" />
+  <property name="version" value="0.2" />
   <property name="jar.file" value="${target.dir}/${ant.project.name}-${version}.jar" />
   <property name="jar.binary.file" value="${target.dir}/${ant.project.name}-bin-${version}.jar" />
 
