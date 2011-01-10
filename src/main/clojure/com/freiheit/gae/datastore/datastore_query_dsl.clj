@@ -62,8 +62,6 @@
          (->> (Cursor/fromWebSafeString cursor)
               (.cursor limit-options))))))
 
-(defvar- *default-fetch-options* (fetch-options 1000))
-
 
 ;; ------------------------------------------------------------------------------
 ;; private functions
@@ -77,7 +75,7 @@
 (defn- execute-query
   "Execute the datastore query. Uses the default fetch options if none are given."
   ([#^Query query]
-     (execute-query query *default-fetch-options*))
+     (execute-query query (FetchOptions$Builder/withDefaults)))
   ([#^Query query #^FetchOptions fetch-options]
      (let [data-service (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService)
            results (. (.prepare data-service query) asQueryResultList fetch-options)]
