@@ -249,11 +249,16 @@
 
 (defn get-by-key
   "For a single key return the datastore entity"
-  [key]
-  (-> key
-      get-entity-by-key
-      entity-to-map
-      translate-from-datastore))
+  ([key]
+     (-> key
+         get-entity-by-key
+         entity-to-map
+         translate-from-datastore))
+  ([key not-found-val]
+     (try 
+      (get-by-key key)
+      (catch EntityNotFoundException e
+        not-found-val))))
 
 (defn resolve-entities
   "For a sequence of entities 'resolve' other entities that are referenced by
