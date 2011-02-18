@@ -26,19 +26,19 @@
 ;;;; Querying entities from the google datastore.
 ;;;; Provides a query-language which can be used to
 ;;;; search for entities by search predicates.
-;;;; 
+;;;;
 ;;;; Examples:
-;;;; 1) (select (where feature ([= :feature-title "Register user"])))
+;;;; 1 (select (where feature ([= :feature-title "Register user"])))
 ;;;;     this will select all features with a feature-title of "Register user".
-;;;; 2) (select-only-keys (where feature ([= :feature-title "Register user"])))
+;;;; 2 (select-only-keys (where feature ([= :feature-title "Register user"])))
 ;;;;     same as above but will only return the keys of the entities. This is
 ;;;;     much faster than querying for whole entities.
 ;;;;
 ;;;; It's also possible to use '<', '<=', '>' or '>=' in the where clause.
-;;;;  
+;;;;
 ;;;; The returned entities are already translated by their corresponding translation function.
-;;;; 
-;;;; 3) (resolve-entities (select (where feature ())) :feature-author-id)
+;;;;
+;;;; 3 (resolve-entities (select (where feature ())) :feature-author-id)
 ;;;;     returns a list of features (as in the example above) but replaces the feature-author-id
 ;;;;     with the actual entities referenced in the entities' :feature-author-id attributes.
 ;;;;
