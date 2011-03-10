@@ -1,5 +1,5 @@
 ;; Copyright (c) 2010 freiheit.com technologies gmbh
-;; 
+;;
 ;; This file is part of clj-gae-datastore.
 ;; clj-gae-datastore is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU Lesser General Public License as published by
@@ -16,10 +16,10 @@
 
 (ns com.freiheit.gae.datastore.datastore-types
   #^{:doc "Translation functions for different datastore types."}
-  (:require 
+  (:require
    [com.freiheit.clojure.util.date :as date]
    [com.freiheit.gae.datastore.keys :as keys])
-  (:import 
+  (:import
    [com.google.appengine.api.datastore Key Text Email]))
 
 ;;;; Some translation functions for the datastore api

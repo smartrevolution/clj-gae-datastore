@@ -28,9 +28,10 @@
   "Create a key for an entity. Can either be a websafe keystring, an appengine key (which
    will be returned unchanged) or a kind and a numeric id."
   ([key]
-     (cond
-      (= Key (class key)) key
-      true (KeyFactory/stringToKey key)))
+     (when key
+       (cond
+        (= Key (class key)) key
+        true (KeyFactory/stringToKey key))))
   ([kind key]
      (let [typed-key (if (= (class key) java.lang.Integer)
 		       (long key)
@@ -47,4 +48,5 @@
 (defn make-web-key
   "Create a websafe string representation of the key"
   [key]
-  (KeyFactory/keyToString key))
+  (when key
+    (KeyFactory/keyToString key)))
