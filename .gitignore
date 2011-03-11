@@ -1,5 +1,11 @@
-*~
-target
+build
 classes
-lib
+docs
+lib/*
 pom.xml
+*.jar
+*.war
+.livereload
+.DS_Store
+*~
+clj-gae-datastore*.jar
