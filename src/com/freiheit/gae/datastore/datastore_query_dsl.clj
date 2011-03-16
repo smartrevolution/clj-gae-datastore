@@ -132,11 +132,11 @@
   (.get (DatastoreServiceFactory/getDatastoreService) keys))
 
 ;; translation multi methods
-(defmulti translate-to-datastore 
+(defmulti translate-to-datastore
   "Multimethod for translating elements to the datastore. Dispatches on the kind."
   :kind)
 
-(defmulti translate-from-datastore 
+(defmulti translate-from-datastore
   "Multimethod for translating elements from the datastore. Dispatches on the kind."
   :kind)
 
@@ -265,7 +265,7 @@
          entity-to-map
          translate-from-datastore))
   ([key not-found-val]
-     (try 
+     (try
       (get-by-key key)
       (catch EntityNotFoundException e
         not-found-val))))

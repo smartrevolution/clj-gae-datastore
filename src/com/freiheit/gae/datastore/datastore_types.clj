@@ -17,7 +17,7 @@
 (ns com.freiheit.gae.datastore.datastore-types
   #^{:doc "Translation functions for different datastore types."}
   (:require
-   [com.freiheit.clojure.util.date :as date]
+   [clj-time.core :as date]
    [com.freiheit.gae.datastore.keys :as keys])
   (:import
    [com.google.appengine.api.datastore Key Text Email]))
@@ -38,11 +38,11 @@
 
 (defn to-ms
   [#^org.joda.time.Datetime date-time]
-  (date/date-to-ms date-time))
+  (date/to-long date-time))
 
 (defn from-ms
   [#^Long ms]
-  (date/date-from-ms ms))
+  (date/from-long ms))
 
 (defn to-e-mail
   [#^String e-mail-str]
