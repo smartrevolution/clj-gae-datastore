@@ -17,7 +17,7 @@
 (ns com.freiheit.gae.datastore.datastore-types
   #^{:doc "Translation functions for different datastore types."}
   (:require
-   [clj-time.core :as date]
+   [clj-time.coerce :as date]
    [com.freiheit.gae.datastore.keys :as keys])
   (:import
    [com.google.appengine.api.datastore Key Text Email]))
