@@ -15,10 +15,8 @@
 ;; along with clj-gae-datastore.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns com.freiheit.gae.datastore.transactions
-  (:require
-   [clojure.contrib.logging :as log]
-   [com.freiheit.clojure.util.exceptions :as exceptions])
-  (:import [com.google.appengine.api.datastore
+  (:require [clojure.contrib.logging :as log])
+  (:import  [com.google.appengine.api.datastore
             DatastoreServiceFactory]))
 
 ;;;; Transaction support for the appengine.
@@ -59,14 +57,16 @@
    has occured then the transaction is rolled back. The exception is rethrown."
   [& body]
   `(let [transaction# (begin-transaction)]
-     (try 
+     (try
 	(let [body# (do ~@body)]
           (commit-transaction transaction#)
           body#)
 	(catch Exception e#
-	    (do 
-	      (log/log :error (str "Exception during transaction.\n\n"
-                                   (exceptions/get-stack-trace e#)))
-	      (when (.isActive transaction#)
-		(rollback-transaction transaction#))
-	      (throw e#))))))
+          (log/log :error (str "Exception during transaction.\n\n"
+                               (with-open [string-writer (java.io.StringWriter.)
+                                           print-writer (java.io.PrintWriter. string-writer true)]
+                                 (.printStackTrace e# print-writer)
+                                 (str string-writer))))
+          (when (.isActive transaction#)
+            (rollback-transaction transaction#))
+          (throw e#)))))
