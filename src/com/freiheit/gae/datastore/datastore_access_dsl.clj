@@ -17,9 +17,9 @@
 (ns com.freiheit.gae.datastore.datastore-access-dsl
   #^{:doc "A mini-language to access the Google AppEngine datastore."}
   (:use [clojure.contrib def ns-utils]
-        [com.freiheit.gae.datastore.datastore-query-dsl 
+        [com.freiheit.gae.datastore.datastore-query-dsl
          :only [to-entity translate-to-datastore translate-from-datastore entity-to-map]])
-  (:require [com.freiheit.gae.datastore.transactions :as transactions]            
+  (:require [com.freiheit.gae.datastore.transactions :as transactions]
             [clojure.contrib.seq-utils :as seq-utils])
   (:import [com.google.appengine.api.datastore
             DatastoreServiceFactory Entity Key KeyFactory]))
