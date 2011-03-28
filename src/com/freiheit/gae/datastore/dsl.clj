@@ -77,7 +77,8 @@
 (defprotocol Datastore
   (to-entity [this] "Converts this to a GAE Datastore Entity")
   (set-parent [this parent] "Set the parent Entity")
-  (get-parent [this] "Get the parent Entity"))
+  (get-parent [this] "Get the parent Entity")
+  (get-kind [this] "Returns the :kind of this Entity"))
 
 
 (defmulti from-entity
@@ -122,7 +123,10 @@ Syntax: (defentity <entity-name>
 	  (with-meta this# {:parent_ parent#}))
 	 (get-parent
 	  [this#]
-	  (:parent_ (meta this#))))
+	  (:parent_ (meta this#)))
+	 (get-kind
+	  [this#]
+	  ~kind))
        (defmethod from-entity ~kind
 	 [entity#]
 	 (let [entity-as-map#
