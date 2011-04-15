@@ -24,6 +24,12 @@
 ;; public functions
 ;; ------------------------------------------------------------------------------
 
+(defn number-key? [key]
+  (nil? (.getName key)))
+
+(defn named-key? [key]
+  (not (number-key? key)))
+
 (defn make-key
   "Create a key for an entity. Can either be a websafe keystring, an appengine key (which
    will be returned unchanged) or a kind and a numeric id."
@@ -37,8 +43,18 @@
 		       (long key)
 		       key )]
        (KeyFactory/createKey kind typed-key)))
-  ([parent kind #^String name]
-     (KeyFactory/createKey parent kind name)))
+  ([parent kind name]
+     (if (integer? name)
+       (KeyFactory/createKey parent kind (long name))
+       (KeyFactory/createKey parent kind name))))
+
+(defn append-key [parent child]
+  (let [name (or (.getName child)
+                 (.getId child))
+        kind (.getKind child)]
+    (if (nil? (.getParent child))
+      (make-key parent kind name)
+      (make-key (append-key parent (.getParent child)) kind name))))
 
 (defn make-named-key
   "Create a named key for an entity."
