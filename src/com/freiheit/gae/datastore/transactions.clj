@@ -52,6 +52,15 @@
        (commit-transaction transaction#)
        body#)))
 
+(defn get-stack-trace
+  "Get the string representation of the strack trace for the given Throwable."
+  [#^java.lang.Throwable t]
+  (with-open [#^java.io.StringWriter string-writer (java.io.StringWriter.)
+              #^java.io.PrintWriter print-writer (java.io.PrintWriter. string-writer true)]
+    (do
+      (.printStackTrace t print-writer)
+      (str string-writer))))
+
 (defmacro with-transaction-rethrow
   "Encapsulate code with a datastore transaction. The transaction is commited at the end. If an exception
    has occured then the transaction is rolled back. The exception is rethrown."
@@ -62,11 +71,7 @@
           (commit-transaction transaction#)
           body#)
 	(catch Exception e#
-          (log/log :error (str "Exception during transaction.\n\n"
-                               (with-open [string-writer (java.io.StringWriter.)
-                                           print-writer (java.io.PrintWriter. string-writer true)]
-                                 (.printStackTrace e# print-writer)
-                                 (str string-writer))))
+          (log/log :error (str "Exception during transaction.\n\n" (get-stack-trace e#)))
           (when (.isActive transaction#)
             (rollback-transaction transaction#))
           (throw e#)))))
