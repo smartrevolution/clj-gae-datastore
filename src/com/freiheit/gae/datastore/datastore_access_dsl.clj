@@ -183,10 +183,17 @@ a key, we keep it, so that the system will update the already existing data in t
     (entitymap-to-new-entity entity-map)
     (to-entity entity-map)))
 
+(defn- save-entity!
+  "Save an entity to the datastore."
+  [entity]
+  (when-not (nil? entity)
+    (.put (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService) entity))
+  entity)
+
 (defn- save-entities!
   "Save a collection of entities to the datastore."
   [#^java.util.Collection entities]
-  (if-not (empty? entities)
+  (when-not (empty? entities)
     (.put (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService) entities))
   entities)
 
@@ -254,17 +261,6 @@ a key, we keep it, so that the system will update the already existing data in t
   (map first (field-clauses clauses)))
 
 
-(defn- build-options-table
-  "Build the options table. At the moment only contains :pre-save and :post-load as for the field declarations.
-   Returns a map of :pre-save and :post-load."
-  [clauses]
-  ;; at the moment just pretend we have a [:options :pre-save ... :post-load ...] clause to use the
-  ;; field-fn-lookup parser
-  (let [option-clause (rest (option-clauses clauses))]
-    (:options (build-fn-lookup-table
-               [(into [] (cons :options (first option-clause)))]))))
-
-
 (defn- get-conversion-fn
   "Get pre-save or post-load conversion function for attr-name"
   [func-name attr-name lookup-table]
@@ -272,21 +268,18 @@ a key, we keep it, so that the system will update the already existing data in t
 
 (defmacro merge-with-translation
   [m msource & kfns]
-  (let [kfn-pairs (partition 2 kfns)
-        with-applied-to-msource (mapcat
-                                 (fn [[k v]]
-                                   `(~k (~v (~k ~msource)))) kfn-pairs)]
+  (let [kfn-pairs               (partition 2 kfns)
+        with-applied-to-msource (mapcat (fn [[k v]] `(~k (~v (~k ~msource)))) kfn-pairs)]
   `(assoc ~m ~@with-applied-to-msource))) ;~@(with-applied-to-msource)
 
 (defn- build-conversion-fn
   "Build the s-expr for a conversion function from a lookup table"
-  [entity-sym kind keys func-name fn-lookup-table]
-  (let [key-with-translate-fn
-        (mapcat #(list
-                  %
-                  (get-conversion-fn func-name % fn-lookup-table)) keys)]
-    `(merge-with-translation {:kind ~kind} ~entity-sym
-       ~@key-with-translate-fn)))
+  [entity-sym kind keys func-name fn-lookup-table options-table]
+  (let [key-with-translate-fn (mapcat #(list % (get-conversion-fn func-name % fn-lookup-table)) keys)]
+    (if (:allow-dynamic options-table)
+      `(let [base-object# (assoc (into {} ~entity-sym) :kind ~kind)]
+         (merge-with-translation base-object# ~entity-sym ~@key-with-translate-fn))
+      `(merge-with-translation {:kind ~kind} ~entity-sym ~@key-with-translate-fn))))
 
 ;;; ------------------------------------------------------------------------------
 ;;; public functions
@@ -349,10 +342,11 @@ assoc-and-track-changes and used assoc or something else instead to manipulate t
   "Define the schema for Google App Engine datastore entity.
 Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unindexed bool] [:attr-name2 ...]...)"
   [entity-name & body]
-  (let [allowed-keys (build-allowed-keys body)
-        fn-lookup-table (build-fn-lookup-table body)
-        options-table (build-options-table body)
-        selection-keys (vec (conj allowed-keys :parent-key)) ;FIXME: Better to store parent-key in meta-data!
+  (let [allowed-keys    (build-allowed-keys body)
+        fn-lookup-table (build-fn-lookup-table (take-while vector? body))
+        options-table   (apply hash-map (remove vector? body))
+        selection-keys  (vec (conj allowed-keys :parent-key))
+        ;FIXME: Better to store parent-key in meta-data!
         kind (str entity-name)]
     `(do
        (defstruct ~entity-name ~@allowed-keys)
@@ -365,19 +359,21 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
          [~entity-name]
          ~(if-let [entity-pre-save (:pre-save options-table)]
             `(let [~entity-name (~entity-pre-save ~entity-name)]
-               ~(build-conversion-fn entity-name kind selection-keys :pre-save fn-lookup-table))
-            (build-conversion-fn entity-name kind selection-keys :pre-save fn-lookup-table)))
+               ~(build-conversion-fn entity-name kind selection-keys :pre-save fn-lookup-table options-table))
+            (build-conversion-fn entity-name kind selection-keys :pre-save fn-lookup-table options-table)))
 
        (defmethod translate-from-datastore ~kind
          [~entity-name]
          ~(if-let [entity-post-load (:post-load options-table)]
             `(~entity-post-load
-              ~(build-conversion-fn entity-name kind selection-keys :post-load fn-lookup-table))
-            (build-conversion-fn entity-name kind selection-keys :post-load fn-lookup-table)))
+              ~(build-conversion-fn entity-name kind selection-keys :post-load fn-lookup-table options-table))
+            (build-conversion-fn entity-name kind selection-keys :post-load fn-lookup-table options-table)))
 
        (defmethod to-entity ~kind
          [~entity-name]
-	 (create-entity ~kind (select-keys ~entity-name (vector ~@allowed-keys)) (get-parent-for-map ~entity-name))))))
+         ~(if (:allow-dynamic options-table)
+            `(create-entity ~kind (dissoc ~entity-name :parent-key :kind) (get-parent-for-map ~entity-name))
+            `(create-entity ~kind (select-keys ~entity-name (vector ~@allowed-keys)) (get-parent-for-map ~entity-name)))))))
 
 
 ;; defining relationships
@@ -407,35 +403,65 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
 
 ;;; TODO: the store-functions should be consolidated into one single function
 
-(def #^{:doc "Store a list of entity-maps in the datastore."
-        :arglist '[entities]}
-     store-entities!
-     (comp
-      (partial map translate-from-datastore)
-      (partial map entity-to-map)
-      save-entities!
-      (partial map to-entity)
-      (partial map translate-to-datastore)))
+(defn store-entities!
+  "Store a list of entity-maps in the datastore."
+  [entities]
+  (->> entities
+       (map translate-to-datastore)
+       (map to-entity)
+       (save-entities!)
+       (map entity-to-map)
+       (map translate-from-datastore)))
 
-(def update-entities!
-     #^{:doc "Update a list of entity-maps in the datastore."
-        :arglist '[entities]}
-     (comp
-      (partial map translate-from-datastore)
-      (partial map entity-to-map)
-      save-entities!
-      (partial map entitymap-to-new-entity) ;entity-for-item
-      (partial map translate-to-datastore)))
+(defn store-entity!
+  "Store an entity-map in the datastore."
+  [entity]
+  (->> entity
+       (translate-to-datastore)
+       (to-entity)
+       (save-entity!)
+       (entity-to-map)
+       (translate-from-datastore)))
 
-(def store-or-update-entities!
-     #^{:doc "Update or save a list of entity-maps in the datastore."
-        :arglist '[entities]}
-     (comp
-      (partial map translate-from-datastore)
-      (partial map entity-to-map)
-      save-entities!
-      (partial map entitymap-to-entity) ;entity-for-item-when-existing
-      (partial map translate-to-datastore)))
+(defn update-entities!
+  "Update a list of entity-maps in the datastore."
+  [entities]
+  (->> entities
+      (map translate-to-datastore)
+      (map entitymap-to-new-entity) ;entity-for-item
+      (save-entities!)
+      (map entity-to-map)
+      (map translate-from-datastore)))
+
+(defn update-entity!
+  "Update an entity-map in the datastore."
+  [entity]
+  (->> entity
+      (translate-to-datastore)
+      (entitymap-to-new-entity) ;entity-for-item
+      (save-entity!)
+      (entity-to-map)
+      (translate-from-datastore)))
+
+(defn store-or-update-entities!
+  "Update or save a list of entity-maps in the datastore."
+  [entities]
+  (->> entities
+      (map translate-to-datastore)
+      (map entitymap-to-entity) ;entity-for-item-when-existing
+      (save-entities!)
+      (map entity-to-map)
+      (map translate-from-datastore)))
+
+(defn store-or-update-entity!
+  "Update or save an entity-map in the datastore."
+  [entity]
+  (->> entity
+      (translate-to-datastore)
+      (entitymap-to-entity) ;entity-for-item-when-existing
+      (save-entity!)
+      (entity-to-map)
+      (translate-from-datastore)))
 
 (defn delete-all!
   "Delete all entities specified by the given keys from the datastore."
@@ -445,3 +471,9 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
     (dorun
      (for [#^Key key-batch (seq-utils/partition-all max-batch-size keys)]
        (.delete service key-batch)))))
+
+(defn delete!
+  "Delete all entities specified by the given keys from the datastore."
+  [key]
+  (let [service (DatastoreServiceFactory/getDatastoreService)]
+    (.delete service key)))
