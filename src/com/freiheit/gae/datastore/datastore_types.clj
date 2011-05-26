@@ -73,7 +73,9 @@
 
 (defn from-sexpr-text
   [#^com.google.appengine.api.datastore.Text t]
-  (read-string (.getValue t)))
+  (if t
+    (read-string (.getValue t))
+    t))
 
 (defn to-vector
   [obj]
