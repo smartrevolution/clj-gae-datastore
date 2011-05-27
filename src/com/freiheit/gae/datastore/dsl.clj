@@ -66,13 +66,12 @@
 
 
 (defn make-empty-entity
-  [kind key]
-  (case key
-    com.google.appengine.api.datastore.Key (Entity. key) ; GAE Key
-    java.lang.Long                         (Entity. (KeyFactory/createKey kind key)) ; number
-    java.lang.Integer                      (Entity. (KeyFactory/createKey kind (long key))) ; number
-    java.lang.String                       (Entity. (KeyFactory/stringToKey key)) ; webkey
-                                           (Entity. kind))) ; no key 
+  ([^java.lang.String kind]
+     (Entity. kind))
+  ([^java.lang.String kind ^java.lang.String name]
+     (Entity. (KeyFactory/createKey kind name)))
+  ([^com.google.appengine.api.datastore.Entity parent ^java.lang.String kind ^java.lang.String name]
+     (Entity. (KeyFactory/createKey parent kind name))))
 
 (defprotocol Datastore
   (to-entity [this] "Converts this to a GAE Datastore Entity")
@@ -105,8 +104,14 @@ Syntax: (defentity <entity-name>
 	 Datastore
 	 (to-entity
 	  [this#]
-	  (let [entity# (make-empty-entity ~kind (:key this#))
-		;;foreach complete clojure record: call 'global' pre-save fn (and store result in 'that'
+	  (let [entity#
+		(if (empty? (:key this#))
+		  (Entity. ~kind)
+		  (try
+		   (Entity. (KeyFactory/stringToKey (:key this#)))
+		   (catch java.lang.IllegalArgumentException e
+		     (Entity. (keyFactory/createKey ~kind (:key this#))))))
+		;;foreach complete clojure record: call 'global' pre-save fn (and store result in 'that')
 		that# (if-let [presave-fn# (:pre-save ~options)]
 			(presave-fn# this#)
 			this#)]
@@ -121,6 +126,7 @@ Syntax: (defentity <entity-name>
 	 (set-parent
 	  [this# parent#]
 	  (with-meta this# {:parent_ parent#}))
+	  ;(with-meta this# {~(keyword (gensym "parent")) parent#})) 
 	 (get-parent
 	  [this#]
 	  (:parent_ (meta this#)))
@@ -132,8 +138,8 @@ Syntax: (defentity <entity-name>
 	 (let [entity-as-map#
 	       (reduce #(assoc %1 (keyword (key %2))
 			       ((lookup ~lookup-table (keyword (key %2)) :post-load identity) (val %2)))
-		       #_{:kind ~kind :key (make-web-key (.getKey entity#))}
-		       {:kind (.getKind entity#) :key (.getKey entity#)}
+		       {:kind ~kind :key (KeyFactory/keyToString (.getKey entity#))}
+		       #_{:kind (.getKind entity#) :key (.getKey entity#)}
 		       (.entrySet (.getProperties entity#)))
 	       {:keys [~@(map #(symbol (name %)) attr-list)]} entity-as-map#]
 	   (let [record# (new ~entity-name ~@(map #(symbol (name %)) attr-list))]
