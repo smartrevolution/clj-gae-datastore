@@ -110,7 +110,7 @@ Syntax: (defentity <entity-name>
 		  (try
 		   (Entity. (KeyFactory/stringToKey (:key this#)))
 		   (catch java.lang.IllegalArgumentException e#
-		     (Entity. (keyFactory/createKey ~kind (:key this#))))))
+		     (Entity. (KeyFactory/createKey ~kind (:key this#))))))
 		;;foreach complete clojure record: call 'global' pre-save fn (and store result in 'that')
 		that# (if-let [presave-fn# (:pre-save ~options)]
 			(presave-fn# this#)
