@@ -61,14 +61,14 @@
                            local-env)]
     (ApiProxy/setDelegate api-proxy)))
 
-(defn init-app-engine
+(defn- init-app-engine
   "Initializes the App Engine services and sets up the environment. To be called from the REPL."
   ([] (init-app-engine "/tmp"))
   ([dir]
      (set-app-engine-delegate dir)
      (set-app-engine-environment)))
 
-(defn wrap-local-app-engine [app]
+(defn- wrap-local-app-engine [app]
   "Wraps a ring app to enable the use of App Engine Services."
   (fn [req]
     (set-app-engine-environment)
@@ -104,7 +104,7 @@
   "Initializes the App Engine services and (re-)starts a Jetty server
    running the supplied ring app, wrapping it to enable App Engine API use
    and serving of static files."
-  (set-app-engine-delegate "/tmp")
+  (init-app-engine)
   (swap! *server* (fn [instance]
                    (when instance
                      (.stop instance))
