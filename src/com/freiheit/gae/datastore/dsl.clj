@@ -1,6 +1,7 @@
 (ns com.freiheit.gae.datastore.dsl
   #^{:doc "A mini-language to access the Google AppEngine datastore."}
-  (:use [clojure.contrib def ns-utils])
+  (:use [clojure.contrib def ns-utils]
+        [clojure.contrib.json :only (json-str)])
   (:require [clojure.contrib.seq-utils :as seq-utils])
   (:import [com.google.appengine.api.datastore
             DatastoreServiceFactory DatastoreService Entity Key KeyFactory
@@ -80,6 +81,10 @@
   (get-kind [this] "Returns the :kind of this Entity"))
 
 
+(defprotocol Serializer
+  (serialize [this] "Serialize this to JSON"))
+
+
 (defmulti from-entity
   "Creates the corresponding Clojure record (defined with defentity) from a GAE Entity"
   (fn [^com.google.appengine.api.datastore.Entity entity]
@@ -101,6 +106,10 @@ Syntax: (defentity <entity-name>
         kind (str entity-name)]
     `(do
        (defrecord ~entity-name [~@(map #(symbol (name %)) attr-list)]
+         Serializer
+         (serialize
+           [this#]
+           (json-str this#))
 	 Datastore
 	 (to-entity
 	  [this#]
@@ -162,7 +171,7 @@ Syntax: (defentity <entity-name>
 		    data
 		    (list data))
 	one-or-more-entities (map to-entity data-coll)]
-    (map #(assoc %1 :key %2)
+    (map #(assoc %1 :key (KeyFactory/keyToString %2))
 	 data-coll
 	 (.put (dss) one-or-more-entities))))
 
