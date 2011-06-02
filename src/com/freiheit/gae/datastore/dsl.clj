@@ -103,58 +103,72 @@ Syntax: (defentity <entity-name>
 	attributes (take-while vector? body) ;a list of the attribute clauses
 	attr-list (map first attributes) ;a list of the attribute names
         lookup-table (build-lookup-table attributes) ; hash-map with attr-name as key and attr-options as val
-        kind (str entity-name)]
+        kind (str entity-name)
+        parent-key-name (keyword (gensym "parent"))
+        dss 'com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService]
     `(do
        (defrecord ~entity-name [~@(map #(symbol (name %)) attr-list)]
          Serializer
          (serialize
+          [this#]
+          (json-str this#))
+         Datastore
+         (to-entity
            [this#]
-           (json-str this#))
-	 Datastore
-	 (to-entity
-	  [this#]
-	  (let [entity#
-		(if (empty? (:key this#))
-		  (Entity. ~kind)
-		  (try
-		   (Entity. (KeyFactory/stringToKey (:key this#)))
-		   (catch java.lang.IllegalArgumentException e#
-		     (Entity. (KeyFactory/createKey ~kind (:key this#))))))
-		;;foreach complete clojure record: call 'global' pre-save fn (and store result in 'that')
-		that# (if-let [presave-fn# (:pre-save ~options)]
-			(presave-fn# this#)
-			this#)]
-	    (doseq [[attr-name# value#] (dissoc that# :key)]
-	      ;;foreach item in record: 1.) call pre-save fn 2.) store attribute unindexed or indexed
-	      (let [unindexed-flag# (lookup ~lookup-table attr-name# :unindexed false) 
-		    pre-save-fn# (lookup ~lookup-table attr-name# :pre-save identity)]
-		(if unindexed-flag#
-		  (.setUnindexedProperty entity# (name attr-name#) (pre-save-fn# value#))
-		  (.setProperty entity# (name attr-name#) (pre-save-fn# value#)))))
-	    entity#))
-	 (set-parent
-	  [this# parent#]
-	  (with-meta this# {:parent_ parent#}))
-	  ;(with-meta this# {~(keyword (gensym "parent")) parent#})) 
-	 (get-parent
-	  [this#]
-	  (:parent_ (meta this#)))
-	 (get-kind
-	  [this#]
-	  ~kind))
+           (let [parent# (~parent-key-name (meta this#));can't use get-parent here (recursiv...)
+                 parent-key# (if parent#
+                               (try
+                                 (KeyFactory/stringToKey (:key parent#))
+                                 (catch java.lang.Exception e#
+                                   (KeyFactory/stringToKey (:key (first (save! parent#))))))
+                               nil)
+                 entity# (if (empty? (:key this#)) ;no key
+                           (if parent#
+                             (Entity. ~kind parent-key# ) ;use parent-key
+                             (Entity. ~kind)) ;just use the kind to generate new key
+                           (try ;else check if the key (provided in a string format) is a valid key
+                             (Entity. (KeyFactory/stringToKey (:key this#))) ;is the key a valid one?
+                             (catch java.lang.IllegalArgumentException e# ;no, this is not a valid key
+                               (if parent# ;so, this must be a keyname instead
+                                 (Entity. (KeyFactory/createKey parent-key# 
+                                                                ~kind (:key this#))) ;with parent
+                                 (Entity. (KeyFactory/createKey ~kind (:key this#))))))) ;without parent 
+                 ;;foreach complete clojure record: call 'global' pre-save fn (and store result in 'that')
+                 that# (if-let [presave-fn# (:pre-save ~options)]
+                         (presave-fn# this#)
+                         this#)]
+             (doseq [[attr-name# value#] (dissoc that# :key)]
+               ;;foreach item in record: 1.) call pre-save fn 2.) store attribute unindexed or indexed
+               (let [unindexed-flag# (lookup ~lookup-table attr-name# :unindexed false) 
+                     pre-save-fn# (lookup ~lookup-table attr-name# :pre-save identity)]
+                 (if unindexed-flag#
+                   (.setUnindexedProperty entity# (name attr-name#) (pre-save-fn# value#))
+                   (.setProperty entity# (name attr-name#) (pre-save-fn# value#)))))
+             entity#))
+         (set-parent
+           [this# parent#]
+           (with-meta this# {~parent-key-name parent#})) 
+         (get-parent
+           [this#]
+           (or (~parent-key-name (meta this#))
+               (let [entity# (to-entity this#)] 
+                 (from-entity (.get (~dss) (.getParent entity#))))))
+         (get-kind
+           [this#]
+           ~kind))
        (defmethod from-entity ~kind
-	 [entity#]
-	 (let [entity-as-map#
-	       (reduce #(assoc %1 (keyword (key %2))
-			       ((lookup ~lookup-table (keyword (key %2)) :post-load identity) (val %2)))
-		       {:kind ~kind :key (KeyFactory/keyToString (.getKey entity#))}
-		       #_{:kind (.getKind entity#) :key (.getKey entity#)}
-		       (.entrySet (.getProperties entity#)))
-	       {:keys [~@(map #(symbol (name %)) attr-list)]} entity-as-map#]
-	   (let [record# (new ~entity-name ~@(map #(symbol (name %)) attr-list))]
-	     (if-let [postload-fn# (:post-load ~options)]
-	       (postload-fn# record#)
-	       record#))))
+         [entity#]
+         (let [entity-as-map#
+               (reduce #(assoc %1 (keyword (key %2))
+                               ((lookup ~lookup-table (keyword (key %2)) :post-load identity) (val %2)))
+                       {:kind ~kind :key (KeyFactory/keyToString (.getKey entity#))}
+                       #_{:kind (.getKind entity#) :key (.getKey entity#)}
+                       (.entrySet (.getProperties entity#)))
+               {:keys [~@(map #(symbol (name %)) attr-list)]} entity-as-map#]
+           (let [record# (new ~entity-name ~@(map #(symbol (name %)) attr-list))]
+             (if-let [postload-fn# (:post-load ~options)]
+               (postload-fn# record#)
+               record#))))
        (class ~entity-name))))
 
 
@@ -167,14 +181,13 @@ Syntax: (defentity <entity-name>
 (defn save!
   "Saves the data objects into the datastore and returns a copy of the original input with the newly generated keys from the datastore"
   [data]
-  (let [data-coll (if (coll? data)
+  (let [data-coll (if (list? data)
 		    data
 		    (list data))
 	one-or-more-entities (map to-entity data-coll)]
     (map #(assoc %1 :key (KeyFactory/keyToString %2))
 	 data-coll
 	 (.put (dss) one-or-more-entities))))
-
 
 (defn- fetch-options
   "Create fetch options for a query with the given limit and an optional websafe cursor.
@@ -248,34 +261,8 @@ Syntax: (defentity <entity-name>
        (.delete service key-batch)))))
 
 
-(defn make-key
-  "Create a key for an entity. Can either be a websafe keystring, an appengine key (which
-   will be returned unchanged) or a kind and a numeric id."
-  ([key]
-     (cond
-      (= Key (class key)) key
-      true (KeyFactory/stringToKey key)))
-  ([kind key]
-     (let [typed-key (if (= (class key) java.lang.Integer) 
-		       (long key) 
-		       key )]
-       (KeyFactory/createKey kind typed-key)))
-  ([parent kind #^String name]
-     (KeyFactory/createKey parent kind name)))
-
-
-(defn make-named-key
-  "Create a named key for an entity."
-  ([#^String kind #^String keyname]
-     (KeyFactory/createKey kind keyname)))
-
-(defn make-web-key
-  "Create a websafe string representation of the key"
-  [key]
-  (KeyFactory/keyToString key))
-
 (defn to-text
-  [#^String s]
+  [#^java.lang.String s]
   (com.google.appengine.api.datastore.Text. s))
 
 (defn from-text
@@ -283,7 +270,7 @@ Syntax: (defentity <entity-name>
   (.getValue t))
 
 (defn to-e-mail
-  [#^String e-mail-str]
+  [#^java.lang.String e-mail-str]
   (com.google.appengine.api.datastore.Email. e-mail-str))
 
 (defn from-e-mail
@@ -291,12 +278,12 @@ Syntax: (defentity <entity-name>
   (.getEmail e))
 
 (defn to-key
-  [key]
-  (make-key key))
+  [#^java.lang.String key]
+  (KeyFactory/stringToKey key))
 
 (defn to-webkey
   [#^com.google.appengine.api.datastore.Key key]
-  (make-web-key key))
+  (KeyFactory/keyToString  key))
 
 (def keyword-to-str
      (memoize name))
