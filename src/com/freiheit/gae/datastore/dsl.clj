@@ -66,14 +66,6 @@
     val-if-not-exists))
 
 
-(defn make-empty-entity
-  ([^java.lang.String kind]
-     (Entity. kind))
-  ([^java.lang.String kind ^java.lang.String name]
-     (Entity. (KeyFactory/createKey kind name)))
-  ([^com.google.appengine.api.datastore.Entity parent ^java.lang.String kind ^java.lang.String name]
-     (Entity. (KeyFactory/createKey parent kind name))))
-
 (defprotocol Datastore
   (to-entity [this] "Converts this to a GAE Datastore Entity")
   (set-parent [this parent] "Set the parent Entity")
@@ -104,8 +96,7 @@ Syntax: (defentity <entity-name>
 	attr-list (map first attributes) ;a list of the attribute names
         lookup-table (build-lookup-table attributes) ; hash-map with attr-name as key and attr-options as val
         kind (str entity-name)
-        parent-key-name (keyword (gensym "parent"))
-        dss 'com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService]
+        parent-key-name (keyword (gensym "parent"))]
     `(do
        (defrecord ~entity-name [~@(map #(symbol (name %)) attr-list)]
          Serializer
@@ -152,7 +143,7 @@ Syntax: (defentity <entity-name>
            [this#]
            (or (~parent-key-name (meta this#))
                (let [entity# (to-entity this#)] 
-                 (from-entity (.get (~dss) (.getParent entity#))))))
+                 (from-entity (.get (DatastoreServiceFactory/getDatastoreService) (.getParent entity#))))))
          (get-kind
            [this#]
            ~kind))
@@ -172,11 +163,6 @@ Syntax: (defentity <entity-name>
        (class ~entity-name))))
 
 
-(defn- dss
-  "Get the DatastoreService"
-  []
-  (com.google.appengine.api.datastore.DatastoreServiceFactory/getDatastoreService))
-
 
 (defn save!
   "Saves the data objects into the datastore and returns a copy of the original input with the newly generated keys from the datastore"
@@ -187,7 +173,8 @@ Syntax: (defentity <entity-name>
 	one-or-more-entities (map to-entity data-coll)]
     (map #(assoc %1 :key (KeyFactory/keyToString %2))
 	 data-coll
-	 (.put (dss) one-or-more-entities))))
+	 (.put (DatastoreServiceFactory/getDatastoreService) one-or-more-entities))))
+
 
 (defn- fetch-options
   "Create fetch options for a query with the given limit and an optional websafe cursor.
@@ -201,6 +188,7 @@ Syntax: (defentity <entity-name>
          (->> (Cursor/fromWebSafeString cursor)
               (.cursor limit-options))))))
 
+
 (defvar- *default-fetch-options* (fetch-options 1000))
 
 
@@ -209,47 +197,63 @@ Syntax: (defentity <entity-name>
   ([#^Query query]
      (execute-query query *default-fetch-options*))
   ([#^Query query #^FetchOptions fetch-options]
-     (. (.prepare ^com.google.appengine.api.datastore.DatastoreService (dss) query)
+     (. (.prepare ^DatastoreService (DatastoreServiceFactory/getDatastoreService) query)
 	asQueryResultList fetch-options)))
 
 
-(defn select
+(defn select-entity
   [#^Query query]
   (map from-entity (-> query
 		       execute-query)))
 
-(defn select-only-keys
+(defn select-ancestor
+  [parent-key #^Query query]
+  (map from-entity (-> query
+                       (.setAncestor (KeyFactory/stringToKey parent-key))
+                       execute-query)))
+
+(defn select-key
   [#^Query query]
-  (map #(.getKey %) (-> query
-			(.setKeysOnly)
-			execute-query)))
+  (map #(:key (from-entity %)) (-> query
+                                   .setKeysOnly ;FIXME: KeysOnly does not work?!
+                                   execute-query)))
+
+
+(def *op-smap* {'= 'com.google.appengine.api.datastore.Query$FilterOperator/EQUAL
+                'not= 'com.google.appengine.api.datastore.Query$FilterOperator/NOT_EQUAL
+                '< 'com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN
+                '<= 'com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN_OR_EQUAL
+                '> 'com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN
+                '>= 'com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN_OR_EQUAL
+                'in 'com.google.appengine.api.datastore.Query$FilterOperator/IN})
+
 
 
 (defmacro where
-  "Create a query for a given kind.
-  TODO: run the query-parameter-values through translate-to-datastore.
-  When the kind is nil, then a kindless-query will be generated.
+  "Create a query for a given kind. When the kind is nil, then a kindless-query will be generated.
+  Allowed operators are: =, not=, <, >, >=, <=, in
   Ex: (where person [[= :person-password-hash \"123\"]])"
-  ([kind queries]
-     `(where nil ~kind ~queries))
-  ([parent-key kind queries]
-     (let [kindless? (nil? kind)
-	   op-smap {'= 'com.google.appengine.api.datastore.Query$FilterOperator/EQUAL
-                    'not= 'com.google.appengine.api.datastore.Query$FilterOperator/NOT_EQUAL
-                    '< 'com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN
-                    '<= 'com.google.appengine.api.datastore.Query$FilterOperator/LESS_THAN_OR_EQUAL
-                    '> 'com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN
-                    '>= 'com.google.appengine.api.datastore.Query$FilterOperator/GREATER_THAN_OR_EQUAL
-                    'in 'com.google.appengine.api.datastore.Query$FilterOperator/IN}
-	   op-queries (map (fn [query] (replace op-smap query)) queries)]
-       `(let [q# ~(if kindless?
-                    `(com.google.appengine.api.datastore.Query.)
-                    `(com.google.appengine.api.datastore.Query. ~(name kind)))]
-	  (when ~parent-key
-            (.setAncestor q# ~parent-key))
-	  (doseq [[operator# prop# value#] ~(vec op-queries)]
-	    (. q# addFilter (name prop#) (eval operator#) value#))
+  ([filter-clauses]
+     `(where nil ~filter-clauses))
+  ([kind filter-clauses]
+     (let [prepared-filter-clauses (map (fn [clause] (replace *op-smap* clause)) filter-clauses)]
+       `(let [q# (if ~(nil? kind)
+                    (com.google.appengine.api.datastore.Query.);kindless query
+                    (com.google.appengine.api.datastore.Query. ~(str kind)))]
+	  (doseq [[operator# prop# value#] ~(vec prepared-filter-clauses)]
+	    (. q# addFilter (name prop#) operator#  (if (= prop# :key)
+                                                      (KeyFactory/stringToKey value#)
+                                                      value#)))
 	  q#))))
+
+
+(defn select-by-key
+  [key-or-list-of-keys]
+  (if (list? key-or-list-of-keys)
+    (map from-entity (vals (.get (DatastoreServiceFactory/getDatastoreService)
+                                 (map #(KeyFactory/stringToKey %) key-or-list-of-keys))))
+    (from-entity (.get (DatastoreServiceFactory/getDatastoreService) (KeyFactory/stringToKey key-or-list-of-keys)))))
+
 
 (defn delete-all!
   "Delete all entities specified by the given keys from the datastore."
@@ -257,7 +261,7 @@ Syntax: (defentity <entity-name>
   (let [service (DatastoreServiceFactory/getDatastoreService)
         max-batch-size 500]
     (dorun
-     (for [#^Key key-batch (partition-all max-batch-size keys)]
+     (for [#^Key key-batch (partition-all max-batch-size (map #(KeyFactory/stringToKey %) keys))]
        (.delete service key-batch)))))
 
 
@@ -281,7 +285,7 @@ Syntax: (defentity <entity-name>
   [#^java.lang.String key]
   (KeyFactory/stringToKey key))
 
-(defn to-webkey
+(defn to-webkey  
   [#^com.google.appengine.api.datastore.Key key]
   (KeyFactory/keyToString  key))
 

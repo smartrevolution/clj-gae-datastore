@@ -10,7 +10,7 @@
 
 (defn load-testdata
   []
-  (dsl/select (dsl/where _test [])))
+  (dsl/select-entity (dsl/where _test [])))
 
 (defn print-testdata
   []
@@ -19,7 +19,7 @@
 
 (defn delete-testdata
   []
-  (dsl/delete-all! (dsl/select-only-keys (dsl/where _test []))))
+  (dsl/delete-all! (dsl/select-key (dsl/where _test []))))
 
 (defn appengine-fixture [f]
   (do
@@ -42,17 +42,18 @@
   (is (= 0  (.getId (.getKey (dsl/to-entity (_test. nil "foo"))))))
   (is (= "_test" (dsl/get-kind (_test. nil "foo")))))
 
+
 (deftest parent-child-relationships
   #_(is (nil? (dsl/get-parent (_test. nil "child"))))
   (is (= "parent" (:foo (dsl/get-parent (dsl/set-parent (_test. nil "child") (_test. nil "parent"))))))
   (is (= 1 (count (dsl/save! (_test. nil "parent")))))
   ;;Create a new entity with a parent that is already stored in the datastore
-  (is (= 1 (count (dsl/select (dsl/where _test ([= :foo "parent"]))))))
+  (is (= 1 (count (dsl/select-entity (dsl/where _test ([= :foo "parent"]))))))
   (is (= 1 (count (dsl/save! (dsl/set-parent (_test. nil "child")
-                                             (first (dsl/select (dsl/where _test ([= :foo "parent"])))))))))
-  (is (= 1 (count (dsl/select (dsl/where _test ([= :foo "child"]))))))
-  (is (= 1 (count (dsl/select (dsl/where _test ([= :foo "parent"]))))))
-  (is (= "parent" (:foo (dsl/get-parent (first (dsl/select (dsl/where _test ([= :foo "child"]))))))))
+                                             (first (dsl/select-entity (dsl/where _test ([= :foo "parent"])))))))))
+  (is (= 1 (count (dsl/select-entity (dsl/where _test ([= :foo "child"]))))))
+  (is (= 1 (count (dsl/select-entity (dsl/where _test ([= :foo "parent"]))))))
+  (is (= "parent" (:foo (dsl/get-parent (first (dsl/select-entity (dsl/where _test ([= :foo "child"]))))))))
   ;;create a new entity with a parent that is not stored (it will be stored automatically first, before its child)
   (is (= "anotherparent" (:foo (dsl/get-parent
                                 (first (dsl/save! (dsl/set-parent (_test. nil "anotherchild")
@@ -72,8 +73,13 @@
   (is (< 0 (.getId (KeyFactory/stringToKey (:key (first (load-testdata)))))))
   (is (= "bar"  (:foo (first (dsl/save! (assoc (first (load-testdata)) :foo "bar"))))))
   (is (= 1 (count (load-testdata))))
-  (is (= "keyname" (-> (_test. "keyname" "foo")
+  (is (= "keyname" (-> (_test. "keyname" "baz")
                        dsl/save!
+                       first
+                       :key
+                       KeyFactory/stringToKey
+                       .getName)))
+  (is (= "keyname" (-> (dsl/select-entity (dsl/where _test [[ = :foo "baz"]]))
                        first
                        :key
                        KeyFactory/stringToKey
@@ -82,4 +88,19 @@
 
 (deftest test-serialize
   (is (= "{\"key\":null,\"foo\":\"foo\"}" (dsl/serialize (_test. nil "foo")))))
+
+
+(deftest test-query
+  (is (= 1 (count (dsl/save! (dsl/set-parent (_test. nil "child")
+                                             (_test. nil "parent"))))))
+  (is (instance? _test (first (dsl/select-entity (dsl/where _test [[= :foo "child"]])))))
+  (is (instance? _test (first (dsl/select-entity (dsl/where _test [[= :foo "parent"]])))))
+  (is (instance? java.lang.String (first (dsl/select-key (dsl/where _test [[= :foo "parent"]])))))
+  (let [parent-key (first (dsl/select-key (dsl/where _test [[= :foo "parent"]])))]
+    (is (instance? java.lang.String (first (dsl/select-key (dsl/where _test [[= :foo "parent"]]))))))
+  (let [parent-key (first (dsl/select-key (dsl/where _test [[= :foo "parent"]])))
+        child-key (first (dsl/select-key (dsl/where _test [[= :foo "child"]])))]
+    (is (= parent-key (:key (dsl/select-by-key parent-key))))
+    (is (= 2 (count (dsl/select-by-key (list parent-key child-key))))))
+  #_(print-testdata))
 
