@@ -186,6 +186,16 @@
        {:result (translate-entities query-result)
         :cursor (.. query-result getCursor toWebSafeString)})))
 
+(defn select-only-keys-batch
+  "Works similar to select-batch but returns the entities' keys as result."
+  ([#^Query query #^Number limit]
+     (select-only-keys-batch query limit nil))
+  ([#^Query query #^Number limit #^String cursor]
+     (let [query-result (->> (fetch-options limit cursor)
+                             (execute-query (.setKeysOnly query)))]
+       {:result (translate-keys-only query-result)
+        :cursor (.. query-result getCursor toWebSafeString)})))
+
 (defmacro where
   "Create a query for a given kind.
 
