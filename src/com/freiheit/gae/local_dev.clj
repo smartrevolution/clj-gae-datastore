@@ -7,6 +7,13 @@
            [com.google.apphosting.api ApiProxy ApiProxy$Environment]
            [com.google.appengine.tools.development ApiProxyLocalFactory LocalServerEnvironment]))
 
+(defonce *server* (atom nil))
+(def *port* 8080)
+(def login-info (atom {:logged-in? false
+                       :admin? false
+                       :email ""
+                       :auth-domain ""}))
+
 (defn- set-app-engine-environment []
   "Sets up the App Engine environment for the current thread."
   (let [att (HashMap. {"com.google.appengine.server_url_key"
