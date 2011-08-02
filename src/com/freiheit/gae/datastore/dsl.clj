@@ -167,7 +167,7 @@ Syntax: (defentity <entity-name>
 (defn save!
   "Saves the data objects into the datastore and returns a copy of the original input with the newly generated keys from the datastore"
   [data]
-  (let [data-coll (if (list? data)
+  (let [data-coll (if (seq? data)
 		    data
 		    (list data))
 	one-or-more-entities (map to-entity data-coll)]
