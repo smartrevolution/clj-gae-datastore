@@ -1,4 +1,4 @@
-(defproject clj-gae-datastore "0.3.2-SNAPSHOT"
+(defproject clj-gae-datastore "0.3.3-SNAPSHOT"
   :description "clojure dsl for accessing the appengine datastore"
   :dependencies [[clojure "1.2.0"]
 		 [clojure-contrib "1.2.0"]
