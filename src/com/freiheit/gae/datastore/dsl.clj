@@ -265,29 +265,29 @@ Syntax: (defentity <entity-name>
        (.delete service key-batch)))))
 
 
-(defn to-text
+(defn string-to-text
   [#^java.lang.String s]
   (com.google.appengine.api.datastore.Text. s))
 
-(defn from-text
+(defn text-to-string
   [#^com.google.appengine.api.datastore.Text t]
   (.getValue t))
 
-(defn to-e-mail
+(defn string-to-email
   [#^java.lang.String e-mail-str]
   (com.google.appengine.api.datastore.Email. e-mail-str))
 
-(defn from-e-mail
+(defn email-to-string
   [#^com.google.appengine.api.datastore.Email e]
   (.getEmail e))
 
-(defn to-key
+(defn string-to-key
   [#^java.lang.String key]
   (KeyFactory/stringToKey key))
 
-(defn to-webkey  
+(defn key-to-string  
   [#^com.google.appengine.api.datastore.Key key]
-  (KeyFactory/keyToString  key))
+  (KeyFactory/keyToString key))
 
 (def keyword-to-str
      (memoize name))
@@ -295,12 +295,12 @@ Syntax: (defentity <entity-name>
 (def str-to-keyword
      (memoize keyword))
 
-(defn to-sexpr-text
+(defn sexpr-to-text
   [obj]
   (binding [*print-dup* true]
     (com.google.appengine.api.datastore.Text. (print-str obj))))
 
-(defn from-sexpr-text
+(defn text-to-sexpr
   [#^com.google.appengine.api.datastore.Text t]
   (read-string (.getValue t)))
 
