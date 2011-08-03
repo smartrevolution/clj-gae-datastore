@@ -53,6 +53,8 @@
 (defn- set-app-engine-delegate [dir]
   "Initializes the App Engine services. Needs to be run (at least) per JVM."
   (let [local-env (proxy [LocalServerEnvironment] []
+                    (enforceApiDeadlines [] true)
+                    (simulateProductionLatencies [] false)
                     (getAppDir [] (File. dir))
                     (getAddress [] "localhost")
                     (getPort [] *port*)
