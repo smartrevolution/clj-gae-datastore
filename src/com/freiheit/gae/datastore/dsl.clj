@@ -264,6 +264,9 @@ Syntax: (defentity <entity-name>
      (for [#^Key key-batch (partition-all max-batch-size (map #(KeyFactory/stringToKey %) keys))]
        (.delete service key-batch)))))
 
+(defn make-key-string
+  [#^java.lang.String kind #^java.lang.String name]
+  (com.google.appengine.api.datastore.KeyFactory/createKeyString kind name))
 
 (defn string-to-text
   [#^java.lang.String s]
