@@ -66,3 +66,10 @@
   [key]
   (when key
     (KeyFactory/keyToString key)))
+
+(defn valid-webkey?
+  [webkey]
+  (try (make-key webkey)
+       true
+       (catch java.lang.IllegalArgumentException e
+         false)))
