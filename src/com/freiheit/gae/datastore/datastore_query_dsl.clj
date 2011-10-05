@@ -49,19 +49,20 @@
 ;; ------------------------------------------------------------------------------
 ;; constants and data structures
 ;; ------------------------------------------------------------------------------
-
 (defn- fetch-options
   "Create fetch options for a query with the given limit and an optional websafe cursor.
   The cursor is ignored if it is nil."
   ([#^Number limit]
      (fetch-options limit nil))
   ([#^Number limit #^String cursor]
-     (let [limit-options (FetchOptions$Builder/withLimit limit)]
+     (let [clamped-limit (if (> 100 limit) 100 limit)
+           limit-options (doto (FetchOptions$Builder/withLimit limit)
+                           (.prefetchSize clamped-limit)
+                           (.chunkSize clamped-limit))]
        (if (nil? cursor)
          limit-options
          (->> (Cursor/fromWebSafeString cursor)
               (.cursor limit-options))))))
-
 
 ;; ------------------------------------------------------------------------------
 ;; private functions
