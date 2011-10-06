@@ -156,6 +156,13 @@
   [entities]
   (map (memfn getKey) entities))
 
+(defn assert-cursor
+  "Get the cursor if one was returned."
+  [result]
+  (if-let [cursor(.getCursor query-result)]
+    (.toWebSafeString cursor)
+    (throw (IllegalArgumentException "Batch-Query didn't return a cursor (ie not-equal filter), use offset/limit instead.".))))
+
 (defn select
   "Executes the given com.google.appengine.api.datastore.Query
   and returns the results as a sequence of items converted with entity-to-map."
@@ -185,7 +192,7 @@
      (let [query-result (->> (fetch-options limit cursor)
                              (execute-query query))]
        {:result (translate-entities query-result)
-        :cursor (.. query-result getCursor toWebSafeString)})))
+        :cursor (assert-cursor query-result)})))
 
 (defn select-only-keys-batch
   "Works similar to select-batch but returns the entities' keys as result."
@@ -195,7 +202,7 @@
      (let [query-result (->> (fetch-options limit cursor)
                              (execute-query (.setKeysOnly query)))]
        {:result (translate-keys-only query-result)
-        :cursor (.. query-result getCursor toWebSafeString)})))
+        :cursor (assert-cursor query-result)})))
 
 (defmacro where
   "Create a query for a given kind.
