@@ -476,4 +476,4 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
   "Delete all entities specified by the given keys from the datastore."
   [key]
   (let [service (DatastoreServiceFactory/getDatastoreService)]
-    (.delete service key)))
+    (.delete service [key])))
