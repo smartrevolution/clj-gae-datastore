@@ -159,9 +159,9 @@
 (defn assert-cursor
   "Get the cursor if one was returned."
   [result]
-  (if-let [cursor(.getCursor query-result)]
+  (if-let [cursor(.getCursor result)]
     (.toWebSafeString cursor)
-    (throw (IllegalArgumentException "Batch-Query didn't return a cursor (ie not-equal filter), use offset/limit instead.".))))
+    (throw (IllegalArgumentException. "Batch-Query didn't return a cursor (ie not-equal filter), use offset/limit instead."))))
 
 (defn select
   "Executes the given com.google.appengine.api.datastore.Query
