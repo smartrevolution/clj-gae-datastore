@@ -3,3 +3,4 @@ target
 classes
 lib
 pom.xml
+clj-gae-datastore-*.jar
