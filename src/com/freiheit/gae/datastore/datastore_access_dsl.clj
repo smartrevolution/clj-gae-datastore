@@ -163,7 +163,12 @@
 (defn- set-properties
   "Set the properties of the entity with the attributes of the item."
   [entity entity-map]
-  (doseq [[prop-name value] (dissoc entity-map :key)] (.setProperty entity (name prop-name) value))
+  (doseq [[prop-name value] (dissoc entity-map :key)]
+    (let [unindexed (get-in (meta entity-map) [prop-name :unindexed])]
+      ;;checking for false to work nicely with allow-dynamic since dynamic fields will be unindexed
+      (if (= false unindexed)
+        (.setProperty entity (name prop-name) value)
+        (.setUnindexedProperty entity (name prop-name) value))))
   entity)
 
 (defn- entitymap-to-new-entity
@@ -266,20 +271,28 @@ a key, we keep it, so that the system will update the already existing data in t
   [func-name attr-name lookup-table]
   (get (get lookup-table attr-name) func-name identity))
 
-(defmacro merge-with-translation
-  [m msource & kfns]
-  (let [kfn-pairs               (partition 2 kfns)
-        with-applied-to-msource (mapcat (fn [[k v]] `(~k (~v (~k ~msource)))) kfn-pairs)]
-  `(assoc ~m ~@with-applied-to-msource))) ;~@(with-applied-to-msource)
+(defn- get-unindexed
+  "Get unindexed for attr-name"
+  [attr-name lookup-table]
+  (get (get lookup-table attr-name) :unindexed false))
+
+(defn- merge-with-translation
+  [m entity translation-fns]
+  (reduce (fn [m [key {:keys [translation unindexed]}]]
+            (let [value     (translation (get entity key))
+                  meta-data (assoc (meta m) key {:unindexed unindexed})]
+              (with-meta (assoc m key value) meta-data)))
+          m translation-fns))
 
 (defn- build-conversion-fn
   "Build the s-expr for a conversion function from a lookup table"
   [entity-sym kind keys func-name fn-lookup-table options-table]
-  (let [key-with-translate-fn (mapcat #(list % (get-conversion-fn func-name % fn-lookup-table)) keys)]
+  (let [translation-fns (reduce (fn [m key] (assoc m key {:translation (get-conversion-fn func-name key fn-lookup-table)
+                                                          :unindexed (get-unindexed key fn-lookup-table)})) {}  keys)]
     (if (:allow-dynamic options-table)
       `(let [base-object# (assoc (into {} ~entity-sym) :kind ~kind)]
-         (merge-with-translation base-object# ~entity-sym ~@key-with-translate-fn))
-      `(merge-with-translation {:kind ~kind} ~entity-sym ~@key-with-translate-fn))))
+         (merge-with-translation base-object# ~entity-sym ~translation-fns))
+      `(merge-with-translation {:kind ~kind} ~entity-sym ~translation-fns))))
 
 ;;; ------------------------------------------------------------------------------
 ;;; public functions
@@ -372,8 +385,12 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
        (defmethod to-entity ~kind
          [~entity-name]
          ~(if (:allow-dynamic options-table)
-            `(create-entity ~kind (dissoc ~entity-name :parent-key :kind) (get-parent-for-map ~entity-name))
-            `(create-entity ~kind (select-keys ~entity-name (vector ~@allowed-keys)) (get-parent-for-map ~entity-name)))))))
+            `(create-entity ~kind
+                            (with-meta (dissoc ~entity-name :parent-key :kind) (meta ~entity-name))
+                            (get-parent-for-map ~entity-name))
+            `(create-entity ~kind
+                            (with-meta (select-keys ~entity-name (vector ~@allowed-keys)) (meta ~entity-name))
+                            (get-parent-for-map ~entity-name)))))))
 
 
 ;; defining relationships
