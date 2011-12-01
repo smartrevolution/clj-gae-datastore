@@ -276,7 +276,7 @@ a key, we keep it, so that the system will update the already existing data in t
   [attr-name lookup-table]
   (get (get lookup-table attr-name) :unindexed false))
 
-(defn- merge-with-translation
+(defn merge-with-translation
   [m entity translation-fns]
   (reduce (fn [m [key {:keys [translation unindexed]}]]
             (let [value     (translation (get entity key))
