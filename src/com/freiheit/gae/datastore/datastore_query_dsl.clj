@@ -6,7 +6,7 @@
 ;; the Free Software Foundation, either version 3 of the License, or
 ;; (at your option) any later version.
 
-;; clj-gae-datastore is distributed in the hope that it will be useful,
+;; clj-gae-datastore is distributed in the hope that it will be useful
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU Lesser General Public License for more details.
@@ -115,7 +115,7 @@
 
 (defn entity-to-map
   "Converts an instance of com.google.appengine.api.datastore.Entity
-  to a PersistentHashMap with properties stored under keyword keys,
+  to a PersistentHashMap with properties stored under keyword keys
   plus the entity's kind stored under :kind and key stored under :key."
   [#^com.google.appengine.api.datastore.Entity entity]
   (reduce #(assoc %1 (mem-keyword (key %2)) (val %2))
@@ -213,7 +213,7 @@
 
   Ex: (where person [[= :person-password-hash \"123\"]])"
   ([kind queries]
-     `(where nil ~kind ~queries))
+     `(where :none ~kind ~queries))
   ([parent-key kind queries]
      (let [kindless? (nil? kind)
 	   op-smap {'= 'com.google.appengine.api.datastore.Query$FilterOperator/EQUAL
@@ -227,8 +227,11 @@
        `(let [q# ~(if kindless?
                     `(com.google.appengine.api.datastore.Query.)
                     `(com.google.appengine.api.datastore.Query. ~(name kind)))]
-	  (when ~parent-key
-            (.setAncestor q# ~parent-key))
+
+          (cond
+           (nil? ~parent-key) (throw (IllegalArgumentException. "Parent key cannot be nil, use :none instead."))
+           (not= :none ~parent-key) (.setAncestor q# ~parent-key))
+
 	  (doseq [[operator# prop# value#] ~(vec op-queries)]
 	    (. q# addFilter (name prop#) (eval operator#) value#))
 	  q#))))
