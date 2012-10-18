@@ -16,8 +16,6 @@
 
 (ns com.freiheit.gae.datastore.datastore-query-dsl
   #^{:doc "A DSL for querying entities from the google datastore."}
-  (:use
-   [clojure.contrib.def :only [defvar-]])
   (:import
    [com.google.appengine.api.datastore
     DatastoreServiceFactory Entity Key KeyFactory Query Query$FilterOperator

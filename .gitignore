@@ -1,6 +1,7 @@
 *~
-target
+.lein*
 classes
+clj-gae-datastore-*.jar
 lib
 pom.xml
-clj-gae-datastore-*.jar
+target

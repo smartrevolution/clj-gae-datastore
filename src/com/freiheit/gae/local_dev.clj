@@ -17,8 +17,8 @@
             ApiProxyLocalFactory
             LocalServerEnvironment]))
 
-(defonce *server* (atom nil))
-(def *port* 8080)
+(defonce server (atom nil))
+(def port 8080)
 (def login-info (atom {:logged-in? false
                        :admin? false
                        :email ""
@@ -38,7 +38,7 @@
 (defn- set-app-engine-environment []
   "Sets up the App Engine environment for the current thread."
   (let [att (HashMap. {"com.google.appengine.server_url_key"
-                       (str "http://localhost:" *port*)})
+                       (str "http://localhost:" port)})
         env-proxy (proxy [ApiProxy$Environment] []
                     (isLoggedIn [] (:logged-in? @login-info))
                     (getEmail [] (:email @login-info))
@@ -57,7 +57,7 @@
                     (simulateProductionLatencies [] false)
                     (getAppDir [] (File. dir))
                     (getAddress [] "localhost")
-                    (getPort [] *port*)
+                    (getPort [] port)
                     (waitForServerToStart [] nil))
         api-proxy (.create (ApiProxyLocalFactory.)
                            local-env)]
@@ -107,7 +107,7 @@
    running the supplied ring app, wrapping it to enable App Engine API use
    and serving of static files."
   (set-app-engine-delegate "/tmp")
-  (swap! *server* (fn [instance]
+  (swap! server (fn [instance]
                    (when instance
                      (.stop instance))
                    (let [app (-> (routes login-routes app-routes)
@@ -115,10 +115,9 @@
                                  (wrap-file "./web")
                                  (wrap-file-info))]
                      (System/setProperty "development" "true")
-                     (run-jetty app {:port *port*
+                     (run-jetty app {:port port
                                      :join? false})))))
 
 (defn stop-server []
   "Stops the local Jetty server."
-  (swap! *server* #(when % (.stop %))))
-
+  (swap! server #(when % (.stop %))))

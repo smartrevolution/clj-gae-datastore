@@ -16,7 +16,7 @@
 
 (ns com.freiheit.gae.datastore.keys
   (:use
-   clojure.test)
+   [clojure.test])
   (:import
    [com.google.appengine.api.datastore KeyFactory Key]))
 

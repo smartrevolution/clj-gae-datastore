@@ -15,8 +15,10 @@
 ;; along with clj-gae-datastore.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns com.freiheit.gae.datastore.transactions
-  (:require [clojure.contrib.logging :as log])
-  (:import  [com.google.appengine.api.datastore DatastoreServiceFactory TransactionOptions$Builder]))
+  (:require
+   [clojure.tools.logging :as log])
+  (:import
+   [com.google.appengine.api.datastore DatastoreServiceFactory TransactionOptions$Builder]))
 
 ;;;; Transaction support for the appengine.
 

@@ -15,7 +15,6 @@
 ;; along with clj-gae-datastore.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns com.freiheit.gae.datastore.datastore-types
-  #^{:doc "Translation functions for different datastore types."}
   (:require
    [clj-time.coerce :as date]
    [clj-time.core :as date-core]
@@ -38,7 +37,7 @@
   (.getValue t))
 
 (defn to-ms
-  [#^org.joda.time.Datetime date-time]
+  [#^org.joda.time.DateTime date-time]
   (date/to-long date-time))
 
 (defn from-ms
@@ -106,4 +105,3 @@
     (if-not (nil? val)
       (f val)
       nil-val)))
-

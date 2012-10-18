@@ -16,13 +16,12 @@
 
 (ns com.freiheit.gae.datastore.datastore-access-dsl
   #^{:doc "A mini-language to access the Google AppEngine datastore."}
-  (:use [clojure.contrib def ns-utils]
-        [com.freiheit.gae.datastore.datastore-query-dsl
-         :only [to-entity translate-to-datastore translate-from-datastore entity-to-map]])
-  (:require [com.freiheit.gae.datastore.transactions :as transactions]
-            [clojure.contrib.seq-utils :as seq-utils])
-  (:import [com.google.appengine.api.datastore
-            DatastoreServiceFactory Entity Key KeyFactory]))
+  (:use
+   [com.freiheit.gae.datastore.datastore-query-dsl :only [to-entity translate-to-datastore translate-from-datastore entity-to-map]])
+  (:require
+   [com.freiheit.gae.datastore.transactions :as transactions])
+  (:import
+   [com.google.appengine.api.datastore DatastoreServiceFactory Entity Key KeyFactory]))
 
 ;;;; Clojure and the Google App Engine Datastore are a perfect fit. With the low-level API
 ;;;; you can almost directly store Clojure datastructures natively into the datastore.
@@ -486,7 +485,7 @@ Syntax: (defentity <entity-name> [:attr-name1 :pre-save #fn :post-load fn :unind
   (let [service (DatastoreServiceFactory/getDatastoreService)
         max-batch-size 500]
     (dorun
-     (for [#^Key key-batch (seq-utils/partition-all max-batch-size keys)]
+     (for [#^Key key-batch (partition-all max-batch-size keys)]
        (.delete service key-batch)))))
 
 (defn delete!
