@@ -8,8 +8,7 @@
                      [hiccup "1.0.1"]
                      [org.clojure/clojure "1.4.0"]
                      [org.clojure/tools.logging "0.2.4"]
-                     [ring/ring-core "1.1.5"]
+                     [ring/ring-core "1.1.5" :exclusions [[org.clojure/clojure-contrib]]]
                      [ring/ring-devel "1.1.5"]]
-  :dev-dependencies [[com.google.appengine/appengine-local-runtime "1.7.0"]
-                     [ring/ring-jetty-adapter "1.1.5"]
-                     [swank-clojure "1.4.0"]])
+  :profieles {:dev {:dependencies [[com.google.appengine/appengine-local-runtime "1.7.0"]
+                                   [ring/ring-jetty-adapter "1.1.5"]]}})

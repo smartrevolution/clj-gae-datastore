@@ -1,7 +1,5 @@
-(ns com.freiheit.gae.datastore.example  
-  (:use
-   [clojure.contrib def])
-  (:require 
+(ns com.freiheit.gae.datastore.example
+  (:require
    [com.freiheit.gae.datastore.datastore-access-dsl :as datastore]
    [com.freiheit.gae.datastore.datastore-query-dsl :as query]
    [com.freiheit.gae.datastore.datastore-types :as types])
@@ -27,7 +25,7 @@
 
 (datastore/defentity person
   [:key]
-  [:name] 
+  [:name]
   [:books])
 
 (def *books*
@@ -87,7 +85,7 @@
     (datastore/update-entities! [(datastore/assoc-and-track-changes book :author "P. Graham")])))
 
 (defn delete-books-from-datastore
-  "Cleans the datastore by selecting the keys of all books and then using these keys 
+  "Cleans the datastore by selecting the keys of all books and then using these keys
 to delete the data."
   []
   (let [keys (query/select-only-keys (query/where book []))]
