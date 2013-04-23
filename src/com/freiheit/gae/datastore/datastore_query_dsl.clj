@@ -1,12 +1,12 @@
 ;; Copyright (c) 2010 freiheit.com technologies gmbh
-;; 
+;;
 ;; This file is part of clj-gae-datastore.
 ;; clj-gae-datastore is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU Lesser General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
 ;; (at your option) any later version.
 
-;; clj-gae-datastore is distributed in the hope that it will be useful,
+;; clj-gae-datastore is distributed in the hope that it will be useful
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU Lesser General Public License for more details.
@@ -16,8 +16,6 @@
 
 (ns com.freiheit.gae.datastore.datastore-query-dsl
   #^{:doc "A DSL for querying entities from the google datastore."}
-  (:use
-   [clojure.contrib.def :only [defvar-]])
   (:import
    [com.google.appengine.api.datastore
     DatastoreServiceFactory Entity Key KeyFactory Query Query$FilterOperator
@@ -26,19 +24,19 @@
 ;;;; Querying entities from the google datastore.
 ;;;; Provides a query-language which can be used to
 ;;;; search for entities by search predicates.
-;;;; 
+;;;;
 ;;;; Examples:
-;;;; 1) (select (where feature ([= :feature-title "Register user"])))
+;;;; 1 (select (where feature ([= :feature-title "Register user"])))
 ;;;;     this will select all features with a feature-title of "Register user".
-;;;; 2) (select-only-keys (where feature ([= :feature-title "Register user"])))
+;;;; 2 (select-only-keys (where feature ([= :feature-title "Register user"])))
 ;;;;     same as above but will only return the keys of the entities. This is
 ;;;;     much faster than querying for whole entities.
 ;;;;
 ;;;; It's also possible to use '<', '<=', '>' or '>=' in the where clause.
-;;;;  
+;;;;
 ;;;; The returned entities are already translated by their corresponding translation function.
-;;;; 
-;;;; 3) (resolve-entities (select (where feature ())) :feature-author-id)
+;;;;
+;;;; 3 (resolve-entities (select (where feature ())) :feature-author-id)
 ;;;;     returns a list of features (as in the example above) but replaces the feature-author-id
 ;;;;     with the actual entities referenced in the entities' :feature-author-id attributes.
 ;;;;
@@ -49,19 +47,20 @@
 ;; ------------------------------------------------------------------------------
 ;; constants and data structures
 ;; ------------------------------------------------------------------------------
-
 (defn- fetch-options
   "Create fetch options for a query with the given limit and an optional websafe cursor.
   The cursor is ignored if it is nil."
   ([#^Number limit]
      (fetch-options limit nil))
   ([#^Number limit #^String cursor]
-     (let [limit-options (FetchOptions$Builder/withLimit limit)]
+     (let [clamped-limit (if (> 100 limit) 100 limit)
+           limit-options (doto (FetchOptions$Builder/withLimit limit)
+                           (.prefetchSize clamped-limit)
+                           (.chunkSize clamped-limit))]
        (if (nil? cursor)
          limit-options
          (->> (Cursor/fromWebSafeString cursor)
               (.cursor limit-options))))))
-
 
 ;; ------------------------------------------------------------------------------
 ;; private functions
@@ -114,7 +113,7 @@
 
 (defn entity-to-map
   "Converts an instance of com.google.appengine.api.datastore.Entity
-  to a PersistentHashMap with properties stored under keyword keys,
+  to a PersistentHashMap with properties stored under keyword keys
   plus the entity's kind stored under :kind and key stored under :key."
   [#^com.google.appengine.api.datastore.Entity entity]
   (reduce #(assoc %1 (mem-keyword (key %2)) (val %2))
@@ -132,11 +131,11 @@
   (.get (DatastoreServiceFactory/getDatastoreService) keys))
 
 ;; translation multi methods
-(defmulti translate-to-datastore 
+(defmulti translate-to-datastore
   "Multimethod for translating elements to the datastore. Dispatches on the kind."
   :kind)
 
-(defmulti translate-from-datastore 
+(defmulti translate-from-datastore
   "Multimethod for translating elements from the datastore. Dispatches on the kind."
   :kind)
 
@@ -154,6 +153,13 @@
   "Translate only the keys of the entities."
   [entities]
   (map (memfn getKey) entities))
+
+(defn assert-cursor
+  "Get the cursor if one was returned."
+  [result]
+  (if-let [cursor(.getCursor result)]
+    (.toWebSafeString cursor)
+    (throw (IllegalArgumentException. "Batch-Query didn't return a cursor (ie not-equal filter), use offset/limit instead."))))
 
 (defn select
   "Executes the given com.google.appengine.api.datastore.Query
@@ -184,7 +190,7 @@
      (let [query-result (->> (fetch-options limit cursor)
                              (execute-query query))]
        {:result (translate-entities query-result)
-        :cursor (.. query-result getCursor toWebSafeString)})))
+        :cursor (assert-cursor query-result)})))
 
 (defn select-only-keys-batch
   "Works similar to select-batch but returns the entities' keys as result."
@@ -194,7 +200,7 @@
      (let [query-result (->> (fetch-options limit cursor)
                              (execute-query (.setKeysOnly query)))]
        {:result (translate-keys-only query-result)
-        :cursor (.. query-result getCursor toWebSafeString)})))
+        :cursor (assert-cursor query-result)})))
 
 (defmacro where
   "Create a query for a given kind.
@@ -205,7 +211,7 @@
 
   Ex: (where person [[= :person-password-hash \"123\"]])"
   ([kind queries]
-     `(where nil ~kind ~queries))
+     `(where :none ~kind ~queries))
   ([parent-key kind queries]
      (let [kindless? (nil? kind)
 	   op-smap {'= 'com.google.appengine.api.datastore.Query$FilterOperator/EQUAL
@@ -219,8 +225,11 @@
        `(let [q# ~(if kindless?
                     `(com.google.appengine.api.datastore.Query.)
                     `(com.google.appengine.api.datastore.Query. ~(name kind)))]
-	  (when ~parent-key
-            (.setAncestor q# ~parent-key))
+
+          (cond
+           (nil? ~parent-key) (throw (IllegalArgumentException. "Parent key cannot be nil, use :none instead."))
+           (not= :none ~parent-key) (.setAncestor q# ~parent-key))
+
 	  (doseq [[operator# prop# value#] ~(vec op-queries)]
 	    (. q# addFilter (name prop#) (eval operator#) value#))
 	  q#))))
@@ -265,7 +274,7 @@
          entity-to-map
          translate-from-datastore))
   ([key not-found-val]
-     (try 
+     (try
       (get-by-key key)
       (catch EntityNotFoundException e
         not-found-val))))
