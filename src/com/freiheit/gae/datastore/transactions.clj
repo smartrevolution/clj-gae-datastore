@@ -1,5 +1,5 @@
 ;; Copyright (c) 2010 freiheit.com technologies gmbh
-;; 
+;;
 ;; This file is part of clj-gae-datastore.
 ;; clj-gae-datastore is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU Lesser General Public License as published by
@@ -16,10 +16,9 @@
 
 (ns com.freiheit.gae.datastore.transactions
   (:require
-   [clojure.contrib.logging :as log]
-   [com.freiheit.clojure.util.exceptions :as exceptions])
-  (:import [com.google.appengine.api.datastore
-            DatastoreServiceFactory]))
+   [clojure.tools.logging :as log])
+  (:import
+   [com.google.appengine.api.datastore DatastoreServiceFactory TransactionOptions$Builder]))
 
 ;;;; Transaction support for the appengine.
 
@@ -28,8 +27,10 @@
 ;; ------------------------------------------------------------------------------
 (defn begin-transaction
   "Begin a datastore transaction. Returns a new transaction."
-  []
-  (.beginTransaction (DatastoreServiceFactory/getDatastoreService)))
+  ([]
+     (.beginTransaction (DatastoreServiceFactory/getDatastoreService)))
+  ([options]
+     (.beginTransaction (DatastoreServiceFactory/getDatastoreService) options)))
 
 (defn commit-transaction
   "Commit a transaction."
@@ -54,19 +55,49 @@
        (commit-transaction transaction#)
        body#)))
 
+(defmacro with-xg-transaction
+  "Encapsulate code with a cross group datastore transaction. The transaction is commited at the end."
+  [& body]
+  `(let [transaction# (begin-transaction (TransactionOptions$Builder/withXG true))]
+     (let [body# (do ~@body)]
+       (commit-transaction transaction#)
+       body#)))
+
+(defn get-stack-trace
+  "Get the string representation of the strack trace for the given Throwable."
+  [#^java.lang.Throwable t]
+  (with-open [#^java.io.StringWriter string-writer (java.io.StringWriter.)
+              #^java.io.PrintWriter print-writer (java.io.PrintWriter. string-writer true)]
+    (do
+      (.printStackTrace t print-writer)
+      (str string-writer))))
+
 (defmacro with-transaction-rethrow
   "Encapsulate code with a datastore transaction. The transaction is commited at the end. If an exception
    has occured then the transaction is rolled back. The exception is rethrown."
   [& body]
   `(let [transaction# (begin-transaction)]
-     (try 
+     (try
 	(let [body# (do ~@body)]
           (commit-transaction transaction#)
           body#)
 	(catch Exception e#
-	    (do 
-	      (log/log :error (str "Exception during transaction.\n\n"
-                                   (exceptions/get-stack-trace e#)))
-	      (when (.isActive transaction#)
-		(rollback-transaction transaction#))
-	      (throw e#))))))
+          (log/log :error (str "Exception during transaction.\n\n" (get-stack-trace e#)))
+          (when (.isActive transaction#)
+            (rollback-transaction transaction#))
+          (throw e#)))))
+
+(defmacro with-xg-transaction-rethrow
+  "Encapsulate code with a datastore transaction. The transaction is commited at the end. If an exception
+   has occured then the transaction is rolled back. The exception is rethrown."
+  [& body]
+  `(let [transaction# (begin-transaction (TransactionOptions$Builder/withXG true))]
+     (try
+	(let [body# (do ~@body)]
+          (commit-transaction transaction#)
+          body#)
+	(catch Exception e#
+          (log/log :error (str "Exception during transaction.\n\n" (get-stack-trace e#)))
+          (when (.isActive transaction#)
+            (rollback-transaction transaction#))
+          (throw e#)))))

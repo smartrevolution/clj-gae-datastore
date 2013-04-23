@@ -1,12 +1,12 @@
 ;; Copyright (c) 2010 freiheit.com technologies gmbh
-;; 
+;;
 ;; This file is part of clj-gae-datastore.
 ;; clj-gae-datastore is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU Lesser General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
 ;; (at your option) any later version.
 
-;; clj-gae-datastore is distributed in the hope that it will be useful,
+;; clj-gae-datastore is distributed in the hope that it will be useful
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU Lesser General Public License for more details.
@@ -15,11 +15,11 @@
 ;; along with clj-gae-datastore.  If not, see <http://www.gnu.org/licenses/>.
 
 (ns com.freiheit.gae.datastore.datastore-types
-  #^{:doc "Translation functions for different datastore types."}
-  (:require 
-   [com.freiheit.clojure.util.date :as date]
+  (:require
+   [clj-time.coerce :as date]
+   [clj-time.core :as date-core]
    [com.freiheit.gae.datastore.keys :as keys])
-  (:import 
+  (:import
    [com.google.appengine.api.datastore Key Text Email]))
 
 ;;;; Some translation functions for the datastore api
@@ -37,12 +37,21 @@
   (.getValue t))
 
 (defn to-ms
-  [#^org.joda.time.Datetime date-time]
-  (date/date-to-ms date-time))
+  [#^org.joda.time.DateTime date-time]
+  (date/to-long date-time))
 
 (defn from-ms
   [#^Long ms]
-  (date/date-from-ms ms))
+  (date/from-long ms))
+
+(defn from-ms-with-tz
+  [tz]
+  (fn [#^Long ms]
+    (-> (date/from-long ms)
+        (date-core/to-time-zone tz))))
+
+(def from-ms-with-default-tz
+     (from-ms-with-tz (date-core/default-time-zone)))
 
 (defn to-e-mail
   [#^String e-mail-str]
@@ -73,7 +82,9 @@
 
 (defn from-sexpr-text
   [#^com.google.appengine.api.datastore.Text t]
-  (read-string (.getValue t)))
+  (if t
+    (read-string (.getValue t))
+    t))
 
 (defn to-vector
   [obj]
@@ -94,4 +105,3 @@
     (if-not (nil? val)
       (f val)
       nil-val)))
-

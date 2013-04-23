@@ -1,0 +1,7 @@
+*~
+.lein*
+classes
+clj-gae-datastore-*.jar
+lib
+pom.xml
+target
